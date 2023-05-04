@@ -171,47 +171,6 @@ impl StructSinker for MySqlStructSinker {
                     }
                 }
             }
-            StructModel::CommentModel {
-                database_name: _,
-                schema_name,
-                table_name,
-                column_name,
-                comment,
-            } => {
-                if (table_name.is_empty() && column_name.is_empty()) || comment.is_empty() {
-                    return Ok(());
-                }
-                let sql;
-                if !column_name.is_empty() {
-                    sql = format!(
-                        "COMMENT ON COLUMN `{}`.`{}`.`{}` IS '{}'",
-                        schema_name, table_name, column_name, comment
-                    )
-                } else {
-                    sql = format!(
-                        "COMMENT ON TABLE `{}`.`{}` is '{}'",
-                        schema_name, table_name, comment
-                    )
-                }
-                match query(&sql).execute(mysql_pool).await {
-                    Ok(_) => {
-                        return {
-                            println!("create comment sql:[{}],execute success", sql);
-                            Ok(())
-                        }
-                    }
-                    Err(e) => {
-                        return {
-                            println!(
-                                "create comment sql:[{}],execute failed:{}",
-                                sql,
-                                e.to_string()
-                            );
-                            Err(Error::from(e))
-                        }
-                    }
-                }
-            }
             _ => {}
         }
         Ok(())
@@ -269,11 +228,20 @@ fn build_sql_with_table_columns(
         result_str
             .push_str(format!(" `{}` {} {} ", col.column_name, col.column_type, nullable).as_str());
         match &col.default_value {
-            Some(v) => result_str.push_str(format!("DEFAULT '{}' ", v).as_str()),
+            Some(v) => {
+                if v.to_lowercase().starts_with("current_") {
+                    result_str.push_str(format!("DEFAULT {} ", v).as_str());
+                } else {
+                    result_str.push_str(format!("DEFAULT '{}' ", v).as_str());
+                }
+            }
             None => {}
         }
         if !col.extra.is_empty() {
-            result_str.push_str(format!("{} ", col.extra).as_str());
+            // DEFAULT_GENERATED
+            // DEFAULT_GENERATED on update CURRENT_TIMESTAMP
+            result_str
+                .push_str(format!("{} ", col.extra.replace("DEFAULT_GENERATED", "")).as_str());
         }
         if !col.column_comment.is_empty() {
             result_str.push_str(format!("COMMENT '{}' ", col.column_comment).as_str())
