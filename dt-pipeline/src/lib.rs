@@ -1,4 +1,5 @@
 pub mod base_pipeline;
+pub mod udf;
 
 use async_trait::async_trait;
 use dt_common::error::Error;

@@ -46,4 +46,7 @@ pub enum Error {
 
     #[error("kafka error: {0}")]
     KafkaError(#[from] kafka::Error),
+
+    #[error("udf error: {0}")]
+    UdfError(String),
 }

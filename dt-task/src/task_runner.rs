@@ -16,7 +16,9 @@ use dt_common::{
 };
 use dt_connector::{extractor::snapshot_resumer::SnapshotResumer, Extractor};
 use dt_meta::{dt_data::DtData, row_type::RowType};
-use dt_pipeline::{base_pipeline::BasePipeline, Pipeline};
+use dt_pipeline::{
+    base_pipeline::BasePipeline, udf::wasm::wasm_udf_loader::WasmUdfLoader, Pipeline,
+};
 
 use log4rs::config::RawConfig;
 use tokio::try_join;
@@ -168,6 +170,18 @@ impl TaskRunner {
         let parallelizer = ParallelizerUtil::create_parallelizer(&self.config).await?;
         let sinkers = SinkerUtil::create_sinkers(&self.config, transaction_command).await?;
 
+        let udf_loader = if self.config.pipeline.wasm_plugin.to_owned().is_empty() {
+            None
+        } else {
+            let mut loader = WasmUdfLoader {
+                store: None,
+                instance: None,
+                wasi_env: None,
+            };
+            loader.init_instance(self.config.pipeline.wasm_plugin.to_owned());
+            Some(loader)
+        };
+
         let pipeline = BasePipeline {
             buffer,
             parallelizer,
@@ -177,6 +191,7 @@ impl TaskRunner {
             checkpoint_interval_secs: self.config.pipeline.checkpoint_interval_secs,
             batch_sink_interval_secs: self.config.pipeline.batch_sink_interval_secs,
             syncer: syncer.to_owned(),
+            udf_loader,
         };
 
         Ok(Box::new(pipeline))

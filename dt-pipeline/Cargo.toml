@@ -17,3 +17,6 @@ log = { workspace = true }
 log4rs = { workspace = true }
 futures = { workspace = true }
 regex = { workspace = true }
+wasmer = { workspace = true }
+wasmer-wasix = { workspace = true }
+serde_json = { workspace = true }

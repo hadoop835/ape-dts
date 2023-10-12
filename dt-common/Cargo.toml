@@ -25,3 +25,5 @@ nom = { workspace = true }
 tokio = { workspace = true }
 thiserror = { workspace = true }
 kafka = { workspace = true }
+wasmer = { workspace = true }
+wasmer-wasix = { workspace = true }

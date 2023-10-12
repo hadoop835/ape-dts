@@ -331,11 +331,17 @@ impl TaskConfig {
             .getuint(PIPELINE, "checkpoint_interval_secs")
             .unwrap()
             .unwrap_or(1);
+        let wasm_plugin = if let Some(wp) = ini.get(PIPELINE, "wasm_plugin") {
+            wp
+        } else {
+            "".to_string()
+        };
 
         PipelineConfig {
             buffer_size,
             checkpoint_interval_secs,
             batch_sink_interval_secs,
+            wasm_plugin,
         }
     }
 

@@ -20,7 +20,7 @@ use dt_connector::Sinker;
 use dt_meta::{ddl_data::DdlData, dt_data::DtData, row_data::RowData};
 use dt_parallelizer::Parallelizer;
 
-use crate::Pipeline;
+use crate::{udf::wasm::wasm_udf_loader::WasmUdfLoader, Pipeline};
 
 pub struct BasePipeline {
     pub buffer: Arc<ConcurrentQueue<DtData>>,
@@ -31,6 +31,8 @@ pub struct BasePipeline {
     pub checkpoint_interval_secs: u64,
     pub batch_sink_interval_secs: u64,
     pub syncer: Arc<Mutex<Syncer>>,
+
+    pub udf_loader: Option<WasmUdfLoader>,
 }
 
 #[async_trait]
@@ -70,6 +72,7 @@ impl Pipeline for BasePipeline {
 
             // process all row_datas in buffer at a time
             let mut sink_count = 0;
+
             if !data.is_empty() {
                 let (count, last_received, last_commit);
                 let sink_raw = match self.sinker_basic_config.db_type {
@@ -128,7 +131,7 @@ impl BasePipeline {
         &mut self,
         all_data: Vec<DtData>,
     ) -> Result<(usize, Option<String>, Option<String>), Error> {
-        let (data, last_received_position, last_commit_position) = Self::fetch_dml(all_data);
+        let (data, last_received_position, last_commit_position) = self.fetch_dml(all_data);
         let count = data.len();
         if count > 0 {
             self.parallelizer
@@ -198,7 +201,10 @@ impl BasePipeline {
         (raw_data, last_received_position, last_commit_position)
     }
 
-    fn fetch_dml(mut data: Vec<DtData>) -> (Vec<RowData>, Option<String>, Option<String>) {
+    fn fetch_dml(
+        &mut self,
+        mut data: Vec<DtData>,
+    ) -> (Vec<RowData>, Option<String>, Option<String>) {
         let mut dml_data = Vec::new();
         let mut last_received_position = Option::None;
         let mut last_commit_position = Option::None;
@@ -210,8 +216,11 @@ impl BasePipeline {
                     continue;
                 }
 
-                DtData::Dml { row_data } => {
+                DtData::Dml { mut row_data } => {
                     last_received_position = Some(row_data.position.clone());
+                    if let Some(udf_loader) = &mut self.udf_loader {
+                        row_data = udf_loader.work_with_data(row_data).unwrap();
+                    }
                     dml_data.push(row_data);
                 }
 
