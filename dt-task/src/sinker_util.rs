@@ -21,6 +21,7 @@ use dt_connector::{
         pg::{pg_checker::PgChecker, pg_sinker::PgSinker, pg_struct_sinker::PgStructSinker},
         rdb_router::RdbRouter,
         redis::redis_sinker::RedisSinker,
+        starrocks::starrocks_sinker::StarRocksSinker,
     },
     Sinker,
 };
@@ -216,6 +217,19 @@ impl SinkerUtil {
                     task_config.parallelizer.parallel_size,
                     *batch_size,
                     method,
+                )
+                .await?
+            }
+
+            SinkerConfig::StarRocks { url, batch_size } => {
+                let router = RdbRouter::from_config(&task_config.router)?;
+                SinkerUtil::create_starrocks_sinker(
+                    url,
+                    &router,
+                    &task_config.runtime.log_level,
+                    task_config.parallelizer.parallel_size,
+                    *batch_size,
+                    transaction_command,
                 )
                 .await?
             }
@@ -494,6 +508,29 @@ impl SinkerUtil {
                 now_db_id: -1,
                 version,
                 method,
+            };
+            sub_sinkers.push(Arc::new(async_mutex::Mutex::new(Box::new(sinker))));
+        }
+        Ok(sub_sinkers)
+    }
+
+    async fn create_starrocks_sinker<'a>(
+        url: &str,
+        _router: &RdbRouter,
+        _log_level: &str,
+        parallel_size: usize,
+        batch_size: usize,
+        _transaction_command: String,
+    ) -> Result<Vec<Arc<async_mutex::Mutex<Box<dyn Sinker + Send>>>>, Error> {
+        let mut sub_sinkers: Vec<Arc<async_mutex::Mutex<Box<dyn Sinker + Send>>>> = Vec::new();
+
+        for _ in 0..parallel_size {
+            let client = Client::new();
+
+            let sinker = StarRocksSinker {
+                url: url.to_string(),
+                batch_size,
+                client,
             };
             sub_sinkers.push(Arc::new(async_mutex::Mutex::new(Box::new(sinker))));
         }

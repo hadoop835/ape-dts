@@ -20,6 +20,8 @@ pub enum DbType {
     Mongo,
     #[strum(serialize = "redis")]
     Redis,
+    #[strum(serialize = "starrocks")]
+    StarRocks
 }
 
 #[derive(Display, EnumString, IntoStaticStr, Debug, Clone)]

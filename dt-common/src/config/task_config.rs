@@ -298,6 +298,17 @@ impl TaskConfig {
                 batch_size,
                 method: Self::get_value(ini, SINKER, "method"),
             },
+
+            DbType::StarRocks => match sink_type {
+                SinkType::Write => SinkerConfig::StarRocks { url, batch_size },
+
+                db_type => {
+                    return Err(Error::ConfigError(format!(
+                        "sinker db type: {} not supported",
+                        db_type
+                    )))
+                }
+            },
         };
         Ok((basic, sinker))
     }

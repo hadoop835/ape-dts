@@ -66,6 +66,11 @@ pub enum SinkerConfig {
         batch_size: usize,
         method: String,
     },
+
+    StarRocks {
+        url: String,
+        batch_size: usize,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -87,6 +92,7 @@ impl SinkerConfig {
             Self::MysqlStruct { .. } => DbType::Mysql,
             Self::PgStruct { .. } => DbType::Pg,
             Self::Redis { .. } => DbType::Redis,
+            Self::StarRocks { .. } => DbType::StarRocks,
         }
     }
 
@@ -101,7 +107,8 @@ impl SinkerConfig {
             | Self::OpenFaas { url, .. }
             | Self::MysqlStruct { url, .. }
             | Self::PgStruct { url, .. }
-            | Self::Redis { url, .. } => url.to_owned(),
+            | Self::Redis { url, .. }
+            | Self::StarRocks { url, .. } => url.to_owned(),
             Self::Foxlake { .. } => String::new(),
         }
     }
