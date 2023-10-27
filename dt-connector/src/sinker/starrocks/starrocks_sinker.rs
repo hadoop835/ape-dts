@@ -29,15 +29,16 @@ impl Sinker for StarRocksSinker {
         }
 
         // https://docs.starrocks.io/en-us/latest/loading/Load_to_Primary_Key_tables#implementation
-        // 0 -> upset(default), 1 -> delete
+        //
         // let test_data = r#"[{"id":10086,"name":"test","comment":"stream load2","op": 1}]"#;
+        // op(__op): 0 -> upset(default), 1 -> delete
         //
         // Mock Table Struct:
         //
         //   CREATE TABLE `dts_test` (
         //     `id` int ,
         //     `name` string ,
-        //     `comment` string 
+        //     `comment` string
         //   ) PRIMARY KEY (id)
         //   DISTRIBUTED BY HASH(id)
         let test_data = r#"10086,test,stream load2,1"#;
