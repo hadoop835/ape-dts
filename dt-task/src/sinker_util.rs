@@ -2,7 +2,9 @@ use std::{str::FromStr, sync::Arc, time::Duration};
 
 use dt_common::{
     config::{
-        config_enums::ConflictPolicyEnum, sinker_config::SinkerConfig, task_config::TaskConfig,
+        config_enums::{ConflictPolicyEnum, DbType},
+        sinker_config::SinkerConfig,
+        task_config::TaskConfig,
     },
     error::Error,
 };
@@ -23,7 +25,8 @@ use dt_connector::{
     Sinker,
 };
 use dt_meta::{
-    mysql::mysql_meta_manager::MysqlMetaManager, pg::pg_meta_manager::PgMetaManager,
+    avro::avro_converter::AvroConverter, mysql::mysql_meta_manager::MysqlMetaManager,
+    pg::pg_meta_manager::PgMetaManager, rdb_meta_manager::RdbMetaManager,
     redis::redis_write_method::RedisWriteMethod,
 };
 use kafka::producer::{Producer, RequiredAcks};
@@ -112,6 +115,25 @@ impl SinkerUtil {
                 required_acks,
             } => {
                 let router = KafkaRouter::from_config(&task_config.router)?;
+                // kafka sinker may need meta data from RDB extractor
+                let extractor_url = &task_config.extractor_basic.url;
+                let meta_manager = match task_config.extractor_basic.db_type {
+                    DbType::Mysql => {
+                        let conn_pool =
+                            TaskUtil::create_mysql_conn_pool(extractor_url, 1, true).await?;
+                        let meta_manager = MysqlMetaManager::new(conn_pool.clone()).init().await?;
+                        Some(RdbMetaManager::from_mysql(meta_manager))
+                    }
+                    DbType::Pg => {
+                        let conn_pool =
+                            TaskUtil::create_pg_conn_pool(extractor_url, 1, true).await?;
+                        let meta_manager = PgMetaManager::new(conn_pool.clone()).init().await?;
+                        Some(RdbMetaManager::from_pg(meta_manager))
+                    }
+                    _ => None,
+                };
+                let avro_converter = AvroConverter::new(meta_manager);
+
                 SinkerUtil::create_kafka_sinker(
                     url,
                     &router,
@@ -119,6 +141,7 @@ impl SinkerUtil {
                     *batch_size,
                     *ack_timeout_secs,
                     required_acks,
+                    &avro_converter,
                 )
                 .await?
             }
@@ -312,6 +335,7 @@ impl SinkerUtil {
         batch_size: usize,
         ack_timeout_secs: u64,
         required_acks: &str,
+        avro_converter: &AvroConverter,
     ) -> Result<Vec<Arc<async_mutex::Mutex<Box<dyn Sinker + Send>>>>, Error> {
         let brokers = vec![url.to_string()];
         let acks = match required_acks {
@@ -332,6 +356,7 @@ impl SinkerUtil {
                 batch_size,
                 kafka_router: router.clone(),
                 producer,
+                avro_converter: avro_converter.clone(),
             };
             sub_sinkers.push(Arc::new(async_mutex::Mutex::new(Box::new(sinker))));
         }

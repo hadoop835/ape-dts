@@ -5,7 +5,11 @@ use concurrent_queue::ConcurrentQueue;
 use dt_common::{error::Error, log_info, utils::rdb_filter::RdbFilter};
 
 use dt_meta::{
-    ddl_data::DdlData, ddl_type::DdlType, dt_data::DtData, struct_meta::database_model::StructModel,
+    ddl_data::DdlData,
+    ddl_type::DdlType,
+    dt_data::{DtData, DtItem},
+    position::Position,
+    struct_meta::database_model::StructModel,
 };
 use sqlx::{MySql, Pool};
 
@@ -16,7 +20,7 @@ use crate::{
 
 pub struct MysqlStructExtractor {
     pub conn_pool: Pool<MySql>,
-    pub buffer: Arc<ConcurrentQueue<DtData>>,
+    pub buffer: Arc<ConcurrentQueue<DtItem>>,
     pub db: String,
     pub filter: RdbFilter,
     pub shut_down: Arc<AtomicBool>,
@@ -61,9 +65,13 @@ impl MysqlStructExtractor {
             meta: Some(meta.to_owned()),
             ddl_type: DdlType::Unknown,
         };
-        BaseExtractor::push_dt_data(self.buffer.as_ref(), DtData::Ddl { ddl_data })
-            .await
-            .unwrap()
+        BaseExtractor::push_dt_data(
+            self.buffer.as_ref(),
+            DtData::Ddl { ddl_data },
+            Position::None,
+        )
+        .await
+        .unwrap()
     }
 
     pub fn build_fetcher(&self) -> MysqlStructFetcher {

@@ -4,7 +4,11 @@ use async_trait::async_trait;
 use concurrent_queue::ConcurrentQueue;
 use dt_common::error::Error;
 use dt_connector::Sinker;
-use dt_meta::{ddl_data::DdlData, dt_data::DtData, row_data::RowData};
+use dt_meta::{
+    ddl_data::DdlData,
+    dt_data::{DtData, DtItem},
+    row_data::RowData,
+};
 
 use crate::Parallelizer;
 
@@ -22,23 +26,23 @@ impl Parallelizer for PartitionParallelizer {
         "PartitionParallelizer".to_string()
     }
 
-    async fn drain(&mut self, buffer: &ConcurrentQueue<DtData>) -> Result<Vec<DtData>, Error> {
+    async fn drain(&mut self, buffer: &ConcurrentQueue<DtItem>) -> Result<Vec<DtItem>, Error> {
         let mut data = Vec::new();
-        while let Ok(dt_data) = buffer.pop() {
-            match &dt_data {
+        while let Ok(item) = buffer.pop() {
+            match &item.dt_data {
                 DtData::Dml { row_data } => {
                     if self.parallel_size > 1
                         && !self.partitioner.can_be_partitioned(row_data).await?
                     {
-                        data.push(dt_data);
+                        data.push(item);
                         break;
                     } else {
-                        data.push(dt_data);
+                        data.push(item);
                     }
                 }
 
                 DtData::Commit { .. } => {
-                    data.push(dt_data);
+                    data.push(item);
                 }
 
                 _ => {}

@@ -27,23 +27,24 @@ use tokio_postgres::replication::LogicalReplicationStream;
 use dt_common::{
     error::Error,
     log_error, log_info,
-    syncer::Syncer,
-    utils::{position_util::PositionUtil, rdb_filter::RdbFilter, time_util::TimeUtil},
+    utils::{rdb_filter::RdbFilter, time_util::TimeUtil},
 };
 
 use crate::{extractor::pg::pg_cdc_client::PgCdcClient, Extractor};
 use dt_meta::{
     adaptor::pg_col_value_convertor::PgColValueConvertor,
     col_value::ColValue,
-    dt_data::DtData,
+    dt_data::{DtData, DtItem},
     pg::{pg_meta_manager::PgMetaManager, pg_tb_meta::PgTbMeta},
+    position::Position,
     row_data::RowData,
     row_type::RowType,
+    syncer::Syncer,
 };
 
 pub struct PgCdcExtractor {
     pub meta_manager: PgMetaManager,
-    pub buffer: Arc<ConcurrentQueue<DtData>>,
+    pub buffer: Arc<ConcurrentQueue<DtItem>>,
     pub filter: RdbFilter,
     pub url: String,
     pub slot_name: String,
@@ -81,18 +82,17 @@ impl PgCdcExtractor {
 
         let mut last_tx_end_lsn = actual_start_lsn.clone();
         let mut xid = String::new();
-        let mut position = String::new();
         let mut start_time = Instant::now();
 
-        let get_position = |lsn: &str, timestamp: i64| -> String {
-            format!(
-                "lsn:{},timestamp:{}",
-                lsn,
-                PositionUtil::format_timestamp_millis(
+        let get_position = |lsn: &str, timestamp: i64| -> Position {
+            Position::PgCdc {
+                lsn: lsn.into(),
+                timestamp: Position::format_timestamp_millis(
                     timestamp / 1000 + SECS_FROM_1970_TO_2000 * 1000,
-                )
-            )
+                ),
+            }
         };
+        let mut position: Position = get_position("", 0);
 
         // refer: https://www.postgresql.org/docs/10/protocol-replication.html to get WAL data details
         loop {
@@ -124,11 +124,11 @@ impl PgCdcExtractor {
                         Commit(commit) => {
                             last_tx_end_lsn = PgLsn::from(commit.end_lsn()).to_string();
                             position = get_position(&last_tx_end_lsn, commit.timestamp());
-                            let commit = DtData::Commit {
-                                xid: xid.clone(),
-                                position: position.to_string(),
+                            let item = DtItem {
+                                dt_data: DtData::Commit { xid: xid.clone() },
+                                position: position.clone(),
                             };
-                            self.buffer.push(commit).unwrap();
+                            self.buffer.push(item).unwrap();
                         }
 
                         Origin(_origin) => {}
@@ -177,13 +177,16 @@ impl PgCdcExtractor {
         stream: &mut Pin<&mut LogicalReplicationStream>,
         start_lsn: &str,
     ) -> Result<(), Error> {
-        let position = self.syncer.lock().unwrap().checkpoint_position.clone();
-        let lsn = if position.is_empty() {
-            start_lsn.parse().unwrap()
-        } else {
-            let position_info = PositionUtil::parse(position.as_str());
-            position_info.get("lsn").unwrap().parse().unwrap()
-        };
+        let lsn =
+            if let Position::PgCdc { lsn, .. } = &self.syncer.lock().unwrap().checkpoint_position {
+                if lsn.is_empty() {
+                    start_lsn.parse().unwrap()
+                } else {
+                    lsn.parse().unwrap()
+                }
+            } else {
+                start_lsn.parse().unwrap()
+            };
 
         // Postgres epoch is 2000-01-01T00:00:00Z
         let pg_epoch = UNIX_EPOCH + Duration::from_secs(SECS_FROM_1970_TO_2000 as u64);
@@ -195,7 +198,7 @@ impl PgCdcExtractor {
         if let Err(error) = result {
             log_error!(
                 "heartbeat to postgres failed, lsn: {}, error: {}",
-                position,
+                lsn.to_string(),
                 error
             );
         }
@@ -234,7 +237,11 @@ impl PgCdcExtractor {
         Ok(())
     }
 
-    async fn decode_insert(&mut self, event: &InsertBody, position: &str) -> Result<(), Error> {
+    async fn decode_insert(
+        &mut self,
+        event: &InsertBody,
+        position: &Position,
+    ) -> Result<(), Error> {
         let tb_meta = self
             .meta_manager
             .get_tb_meta_by_oid(event.rel_id() as i32)?;
@@ -246,12 +253,15 @@ impl PgCdcExtractor {
             row_type: RowType::Insert,
             before: Option::None,
             after: Some(col_values),
-            position: position.to_string(),
         };
-        self.push_row_to_buf(row_data).await
+        self.push_row_to_buf(row_data, position.clone()).await
     }
 
-    async fn decode_update(&mut self, event: &UpdateBody, position: &str) -> Result<(), Error> {
+    async fn decode_update(
+        &mut self,
+        event: &UpdateBody,
+        position: &Position,
+    ) -> Result<(), Error> {
         let tb_meta = self
             .meta_manager
             .get_tb_meta_by_oid(event.rel_id() as i32)?;
@@ -279,12 +289,15 @@ impl PgCdcExtractor {
             row_type: RowType::Update,
             before: Some(col_values_before),
             after: Some(col_values_after),
-            position: position.to_string(),
         };
-        self.push_row_to_buf(row_data).await
+        self.push_row_to_buf(row_data, position.clone()).await
     }
 
-    async fn decode_delete(&mut self, event: &DeleteBody, position: &str) -> Result<(), Error> {
+    async fn decode_delete(
+        &mut self,
+        event: &DeleteBody,
+        position: &Position,
+    ) -> Result<(), Error> {
         let tb_meta = self
             .meta_manager
             .get_tb_meta_by_oid(event.rel_id() as i32)?;
@@ -303,9 +316,8 @@ impl PgCdcExtractor {
             row_type: RowType::Delete,
             before: Some(col_values),
             after: None,
-            position: position.to_string(),
         };
-        self.push_row_to_buf(row_data).await
+        self.push_row_to_buf(row_data, position.clone()).await
     }
 
     fn parse_row_data(
@@ -340,7 +352,11 @@ impl PgCdcExtractor {
         Ok(col_values)
     }
 
-    async fn push_row_to_buf(&mut self, row_data: RowData) -> Result<(), Error> {
+    async fn push_row_to_buf(
+        &mut self,
+        row_data: RowData,
+        position: Position,
+    ) -> Result<(), Error> {
         if self.filter.filter_event(
             &row_data.schema,
             &row_data.tb,
@@ -348,7 +364,12 @@ impl PgCdcExtractor {
         ) {
             return Ok(());
         }
-        self.buffer.push(DtData::Dml { row_data }).unwrap();
+
+        let item = DtItem {
+            dt_data: DtData::Dml { row_data },
+            position,
+        };
+        self.buffer.push(item).unwrap();
         Ok(())
     }
 }

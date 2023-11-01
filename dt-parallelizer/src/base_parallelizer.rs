@@ -4,26 +4,29 @@ use std::sync::Arc;
 use concurrent_queue::ConcurrentQueue;
 use dt_common::error::Error;
 use dt_connector::Sinker;
-use dt_meta::{ddl_data::DdlData, dt_data::DtData, row_data::RowData};
+use dt_meta::{
+    ddl_data::DdlData,
+    dt_data::{DtData, DtItem},
+    row_data::RowData,
+};
 
 pub struct BaseParallelizer {
-    pub poped_data: VecDeque<DtData>,
+    pub poped_data: VecDeque<DtItem>,
 }
 
 impl BaseParallelizer {
-    pub fn drain(&mut self, buffer: &ConcurrentQueue<DtData>) -> Result<Vec<DtData>, Error> {
-        let mut data: Vec<DtData> = Vec::new();
-
+    pub fn drain(&mut self, buffer: &ConcurrentQueue<DtItem>) -> Result<Vec<DtItem>, Error> {
+        let mut data = Vec::new();
         while let Some(dt_data) = self.poped_data.pop_front() {
             data.push(dt_data);
         }
 
         // ddls and dmls should be drained seperately
-        while let Ok(dt_data) = buffer.pop() {
-            if data.is_empty() || data[0].is_ddl() == dt_data.is_ddl() {
-                data.push(dt_data);
+        while let Ok(item) = buffer.pop() {
+            if data.is_empty() || data[0].is_ddl() == item.is_ddl() {
+                data.push(item);
             } else {
-                self.poped_data.push_back(dt_data);
+                self.poped_data.push_back(item);
                 break;
             }
         }

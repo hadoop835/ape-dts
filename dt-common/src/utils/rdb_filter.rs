@@ -70,17 +70,7 @@ impl RdbFilter {
         let escape_pairs = SqlUtil::get_escape_pairs(&self.db_type);
         let filter = Self::contain_tb(&self.ignore_tbs, db, tb, &escape_pairs)
             || Self::contain_db(&self.ignore_dbs, db, &escape_pairs);
-
-        let mut keep = Self::contain_db(&self.do_dbs, db, &escape_pairs);
-        if !filter && !keep {
-            for (do_db, _do_tb) in self.do_tbs.iter() {
-                if Self::match_token(do_db, db, &escape_pairs) {
-                    keep = true;
-                    break;
-                }
-            }
-        }
-        filter || !keep
+        filter
     }
 
     pub fn filter_tb(&mut self, db: &str, tb: &str) -> bool {
@@ -774,5 +764,16 @@ mod tests {
         };
         let mut rdb_fitler = RdbFilter::from_config(&config, db_type.clone()).unwrap();
         assert!(rdb_fitler.filter_db("test_db_*"));
+
+        // ingore some tbs in db, but not all tbs in db filtered
+        let config = FilterConfig::Rdb {
+            do_dbs: String::new(),
+            ignore_dbs: String::new(),
+            do_tbs: String::new(),
+            ignore_tbs: "test_db_*.test_tb_*".to_string(),
+            do_events: String::from("insert"),
+        };
+        let mut rdb_fitler = RdbFilter::from_config(&config, db_type.clone()).unwrap();
+        assert!(!rdb_fitler.filter_db("test_db_*"));
     }
 }

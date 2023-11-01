@@ -8,9 +8,15 @@ use async_trait::async_trait;
 
 use concurrent_queue::ConcurrentQueue;
 use dt_meta::{
-    adaptor::mysql_col_value_convertor::MysqlColValueConvertor, col_value::ColValue,
-    ddl_data::DdlData, ddl_type::DdlType, dt_data::DtData,
-    mysql::mysql_meta_manager::MysqlMetaManager, row_data::RowData, row_type::RowType,
+    adaptor::mysql_col_value_convertor::MysqlColValueConvertor,
+    col_value::ColValue,
+    ddl_data::DdlData,
+    ddl_type::DdlType,
+    dt_data::{DtData, DtItem},
+    mysql::mysql_meta_manager::MysqlMetaManager,
+    position::Position,
+    row_data::RowData,
+    row_type::RowType,
     sql_parser::ddl_parser::DdlParser,
 };
 use mysql_binlog_connector_rust::{
@@ -21,11 +27,7 @@ use mysql_binlog_connector_rust::{
     },
 };
 
-use dt_common::{
-    error::Error,
-    log_error, log_info,
-    utils::{position_util::PositionUtil, rdb_filter::RdbFilter},
-};
+use dt_common::{error::Error, log_error, log_info, utils::rdb_filter::RdbFilter};
 
 use crate::{
     datamarker::traits::DataMarkerFilter, extractor::base_extractor::BaseExtractor, Extractor,
@@ -33,7 +35,7 @@ use crate::{
 
 pub struct MysqlCdcExtractor {
     pub meta_manager: MysqlMetaManager,
-    pub buffer: Arc<ConcurrentQueue<DtData>>,
+    pub buffer: Arc<ConcurrentQueue<DtItem>>,
     pub filter: RdbFilter,
     pub url: String,
     pub binlog_filename: String,
@@ -93,12 +95,13 @@ impl MysqlCdcExtractor {
         binlog_filename: &str,
         table_map_event_map: &mut HashMap<u64, TableMapEvent>,
     ) -> Result<(), Error> {
-        let position = format!(
-            "binlog_filename:{},next_event_position:{},timestamp:{}",
-            binlog_filename,
-            header.next_event_position,
-            PositionUtil::format_timestamp_millis(header.timestamp as i64 * 1000)
-        );
+        let position = Position::MysqlCdc {
+            // TODO, get server_id from source mysql
+            server_id: String::new(),
+            binlog_filename: binlog_filename.into(),
+            next_event_position: header.next_event_position,
+            timestamp: Position::format_timestamp_millis(header.timestamp as i64 * 1000),
+        };
 
         match data {
             EventData::TableMap(d) => {
@@ -124,9 +127,8 @@ impl MysqlCdcExtractor {
                         row_type: RowType::Insert,
                         before: Option::None,
                         after: Some(col_values),
-                        position: position.clone(),
                     };
-                    self.push_row_to_buf(row_data).await?;
+                    self.push_row_to_buf(row_data, position.clone()).await?;
                 }
             }
 
@@ -145,9 +147,8 @@ impl MysqlCdcExtractor {
                         row_type: RowType::Update,
                         before: Some(col_values_before),
                         after: Some(col_values_after),
-                        position: position.clone(),
                     };
-                    self.push_row_to_buf(row_data).await?;
+                    self.push_row_to_buf(row_data, position.clone()).await?;
                 }
             }
 
@@ -163,20 +164,18 @@ impl MysqlCdcExtractor {
                         row_type: RowType::Delete,
                         before: Some(col_values),
                         after: Option::None,
-                        position: position.clone(),
                     };
-                    self.push_row_to_buf(row_data).await?;
+                    self.push_row_to_buf(row_data, position.clone()).await?;
                 }
             }
 
             EventData::Query(query) => {
-                self.handle_query_event(query).await?;
+                self.handle_query_event(query, position.clone()).await?;
             }
 
             EventData::Xid(xid) => {
                 let commit = DtData::Commit {
                     xid: xid.xid.to_string(),
-                    position: position.to_string(),
                 };
 
                 if match &mut self.datamarker_filter {
@@ -186,7 +185,7 @@ impl MysqlCdcExtractor {
                     return Ok(());
                 }
 
-                BaseExtractor::push_dt_data(self.buffer.as_ref(), commit).await?;
+                BaseExtractor::push_dt_data(self.buffer.as_ref(), commit, position.clone()).await?;
             }
 
             _ => {}
@@ -195,7 +194,11 @@ impl MysqlCdcExtractor {
         Ok(())
     }
 
-    async fn push_row_to_buf(&mut self, row_data: RowData) -> Result<(), Error> {
+    async fn push_row_to_buf(
+        &mut self,
+        row_data: RowData,
+        position: Position,
+    ) -> Result<(), Error> {
         if self.filter.filter_event(
             &row_data.schema,
             &row_data.tb,
@@ -211,7 +214,7 @@ impl MysqlCdcExtractor {
             return Ok(());
         }
 
-        BaseExtractor::push_row(self.buffer.as_ref(), row_data).await
+        BaseExtractor::push_row(self.buffer.as_ref(), row_data, position).await
     }
 
     async fn parse_row_data(
@@ -247,7 +250,11 @@ impl MysqlCdcExtractor {
         Ok(data)
     }
 
-    async fn handle_query_event(&mut self, query: QueryEvent) -> Result<(), Error> {
+    async fn handle_query_event(
+        &mut self,
+        query: QueryEvent,
+        position: Position,
+    ) -> Result<(), Error> {
         if query.query == QUERY_BEGIN {
             return Ok(());
         }
@@ -299,7 +306,8 @@ impl MysqlCdcExtractor {
         };
 
         if !self.filter.filter_ddl() && !filter {
-            BaseExtractor::push_dt_data(self.buffer.as_ref(), DtData::Ddl { ddl_data }).await?;
+            BaseExtractor::push_dt_data(self.buffer.as_ref(), DtData::Ddl { ddl_data }, position)
+                .await?;
         }
         Ok(())
     }

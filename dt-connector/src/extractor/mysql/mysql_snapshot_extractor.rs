@@ -5,11 +5,12 @@ use concurrent_queue::ConcurrentQueue;
 use dt_meta::{
     adaptor::{mysql_col_value_convertor::MysqlColValueConvertor, sqlx_ext::SqlxMysqlExt},
     col_value::ColValue,
-    dt_data::DtData,
+    dt_data::DtItem,
     mysql::{
         mysql_col_type::MysqlColType, mysql_meta_manager::MysqlMetaManager,
         mysql_tb_meta::MysqlTbMeta,
     },
+    position::Position,
     row_data::RowData,
 };
 use futures::TryStreamExt;
@@ -27,7 +28,7 @@ pub struct MysqlSnapshotExtractor {
     pub conn_pool: Pool<MySql>,
     pub meta_manager: MysqlMetaManager,
     pub resumer: SnapshotResumer,
-    pub buffer: Arc<ConcurrentQueue<DtData>>,
+    pub buffer: Arc<ConcurrentQueue<DtItem>>,
     pub slice_size: usize,
     pub db: String,
     pub tb: String,
@@ -90,7 +91,7 @@ impl MysqlSnapshotExtractor {
         let mut rows = sqlx::query(&sql).fetch(&self.conn_pool);
         while let Some(row) = rows.try_next().await.unwrap() {
             let row_data = RowData::from_mysql_row(&row, tb_meta);
-            BaseExtractor::push_row(self.buffer.as_ref(), row_data)
+            BaseExtractor::push_row(self.buffer.as_ref(), row_data, Position::None)
                 .await
                 .unwrap();
             all_count += 1;
@@ -140,13 +141,18 @@ impl MysqlSnapshotExtractor {
             let mut rows = query.fetch(&self.conn_pool);
             let mut slice_count = 0usize;
             while let Some(row) = rows.try_next().await.unwrap() {
-                let mut row_data = RowData::from_mysql_row(&row, tb_meta);
+                let row_data = RowData::from_mysql_row(&row, tb_meta);
                 start_value =
                     MysqlColValueConvertor::from_query(&row, order_col, order_col_type).unwrap();
-                if let Some(value) = start_value.to_option_string() {
-                    row_data.position = format!("`{}`:{}", order_col, value)
-                }
-                BaseExtractor::push_row(self.buffer.as_ref(), row_data)
+                let position = if let Some(value) = start_value.to_option_string() {
+                    Position::RdbSnapshot {
+                        order_col: order_col.into(),
+                        value,
+                    }
+                } else {
+                    Position::None
+                };
+                BaseExtractor::push_row(self.buffer.as_ref(), row_data, position)
                     .await
                     .unwrap();
                 slice_count += 1;

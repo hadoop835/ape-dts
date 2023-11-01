@@ -1,9 +1,21 @@
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::{kafka::kafka_message::KafkaMessage, redis::redis_entry::RedisEntry};
+use crate::{position::Position, redis::redis_entry::RedisEntry};
 
 use super::{ddl_data::DdlData, row_data::RowData};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DtItem {
+    pub dt_data: DtData,
+    pub position: Position,
+}
+
+impl DtItem {
+    pub fn is_ddl(&self) -> bool {
+        self.dt_data.is_ddl()
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DtData {
@@ -13,17 +25,13 @@ pub enum DtData {
     Dml {
         row_data: RowData,
     },
+    Begin {},
     Commit {
         xid: String,
-        position: String,
     },
     #[serde(skip)]
     Redis {
         entry: RedisEntry,
-    },
-    #[serde(skip)]
-    Kafka {
-        message: KafkaMessage,
     },
 }
 

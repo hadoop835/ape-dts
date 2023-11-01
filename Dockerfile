@@ -1,12 +1,9 @@
 # ARG DIST_IMG=gcr.io/distroless/cc:nonroot
-# ARG DIST_IMG=gcr.io/distroless/cc:debug
-ARG DIST_IMG=gcr.io/distroless/cc-debian12:debug
-# ARG DIST_IMG=debian:buster-slim
+ARG DIST_IMG=gcr.io/distroless/cc:debug
 
-ARG RUST_VERSION=1.70.0
+ARG RUST_VERSION=1.69.0
 # ARG RUST_IMG_ALT=-slim-bullseye
-# ARG RUST_IMG_ALT=-bullseye
-ARG RUST_IMG_ALT=-bookworm
+ARG RUST_IMG_ALT=-bullseye
 
 FROM --platform=${BUILDPLATFORM} rust:${RUST_VERSION}${RUST_IMG_ALT} as builder
 
@@ -36,8 +33,7 @@ RUN --mount=type=cache,target=$CARGO_HOME/git,rw \
 #     apt install --no-install-recommends -y \
 #         pkg-config \
 #         libssl-dev \
-#         libcrypto++-dev \
-#         zlib1g
+#         libcrypto++-dev
 
 WORKDIR /app
 COPY . ./
@@ -45,6 +41,13 @@ COPY . ./
 # RUN --mount=type=cache,target=$CARGO_HOME/git,rw \
 #     --mount=type=cache,target=$CARGO_HOME/registry,rw \
 #     cargo update
+
+# RUN --mount=type=cache,target=$CARGO_HOME/git,rw \
+#     --mount=type=cache,target=$CARGO_HOME/registry,rw \
+#     --mount=type=cache,target=/app/target,rw \
+#     cargo build --release ${BUILD_ARGS} && \
+#     mkdir -p bin/ && \
+#     cp /app/target/release/${MODULE_NAME} bin/
 
 RUN --mount=type=cache,target=$CARGO_HOME/git,rw \
     --mount=type=cache,target=$CARGO_HOME/registry,rw \

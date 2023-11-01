@@ -76,7 +76,6 @@ impl MongoMerger {
                         tb: row_data.tb.clone(),
                         before: Some(before),
                         after: Option::None,
-                        position: row_data.position.clone(),
                     };
                     delete_map.insert(id.clone(), delete_row);
 
@@ -86,7 +85,6 @@ impl MongoMerger {
                         tb: row_data.tb,
                         before: Option::None,
                         after: Some(after),
-                        position: row_data.position,
                     };
                     insert_map.insert(id, insert_row);
                 }

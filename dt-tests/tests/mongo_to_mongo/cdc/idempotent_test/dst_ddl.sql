@@ -16,5 +16,5 @@ db.createCollection("tb_2");
 
 use test_db_1
 
-db.tb_1.insertOne({ "name": "a", "age": "1", "_id": "1" });
-db.tb_1.insertOne({ "name": "b", "age": "2", "_id": "2" });
+db.tb_1.insertOne({ "name": "a", "age": "1000", "_id": "1" });
+db.tb_1.insertOne({ "name": "b", "age": "2000", "_id": "2" });

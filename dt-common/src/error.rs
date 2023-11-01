@@ -11,6 +11,9 @@ pub enum Error {
     #[error("sinker error: {0}")]
     SinkerError(String),
 
+    #[error("heartbeat error: {0}")]
+    HearbeatError(String),
+
     #[error("pull mysql binlog error: {0}")]
     BinlogError(#[from] mysql_binlog_connector_rust::binlog_error::BinlogError),
 
@@ -49,4 +52,9 @@ pub enum Error {
 
     #[error("udf error: {0}")]
     UdfError(String),
+    #[error("avro encode error: {0}")]
+    AvroEncodeError(#[from] apache_avro::Error),
+
+    #[error("enum parse error: {0}")]
+    EnumParseError(#[from] strum::ParseError),
 }

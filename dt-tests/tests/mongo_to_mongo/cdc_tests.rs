@@ -27,4 +27,11 @@ mod test {
     async fn cdc_idempotent_test() {
         TestBase::run_mongo_cdc_resume_test("mongo_to_mongo/cdc/idempotent_test", 3000, 3000).await;
     }
+
+    #[tokio::test]
+    #[serial]
+    async fn cdc_serial_test() {
+        TestBase::run_mongo_cdc_resume_test("mongo_to_mongo/cdc/serial_sink_test", 3000, 3000)
+            .await;
+    }
 }

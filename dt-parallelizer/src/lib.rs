@@ -16,14 +16,18 @@ use async_trait::async_trait;
 use concurrent_queue::ConcurrentQueue;
 use dt_common::error::Error;
 use dt_connector::Sinker;
-use dt_meta::{ddl_data::DdlData, dt_data::DtData, row_data::RowData};
+use dt_meta::{
+    ddl_data::DdlData,
+    dt_data::{DtData, DtItem},
+    row_data::RowData,
+};
 use merge_parallelizer::TbMergedData;
 
 #[async_trait]
 pub trait Parallelizer {
     fn get_name(&self) -> String;
 
-    async fn drain(&mut self, _buffer: &ConcurrentQueue<DtData>) -> Result<Vec<DtData>, Error> {
+    async fn drain(&mut self, _buffer: &ConcurrentQueue<DtItem>) -> Result<Vec<DtItem>, Error> {
         Ok(Vec::new())
     }
 

@@ -15,8 +15,9 @@ use dt_common::{error::Error, log_info};
 use dt_meta::{
     adaptor::pg_col_value_convertor::PgColValueConvertor,
     col_value::ColValue,
-    dt_data::DtData,
+    dt_data::DtItem,
     pg::{pg_meta_manager::PgMetaManager, pg_tb_meta::PgTbMeta},
+    position::Position,
     row_data::RowData,
     row_type::RowType,
 };
@@ -32,7 +33,7 @@ pub struct PgCheckExtractor {
     pub conn_pool: Pool<Postgres>,
     pub meta_manager: PgMetaManager,
     pub check_log_dir: String,
-    pub buffer: Arc<ConcurrentQueue<DtData>>,
+    pub buffer: Arc<ConcurrentQueue<DtItem>>,
     pub batch_size: usize,
     pub shut_down: Arc<AtomicBool>,
 }
@@ -87,7 +88,7 @@ impl BatchCheckExtractor for PgCheckExtractor {
                 row_data.before = row_data.after.clone();
             }
 
-            BaseExtractor::push_row(self.buffer.as_ref(), row_data)
+            BaseExtractor::push_row(self.buffer.as_ref(), row_data, Position::None)
                 .await
                 .unwrap();
         }

@@ -27,3 +27,4 @@ thiserror = { workspace = true }
 kafka = { workspace = true }
 wasmer = { workspace = true }
 wasmer-wasix = { workspace = true }
+apache-avro = {workspace = true}

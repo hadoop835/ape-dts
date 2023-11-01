@@ -11,8 +11,9 @@ use dt_common::log_info;
 use dt_meta::{
     adaptor::{pg_col_value_convertor::PgColValueConvertor, sqlx_ext::SqlxPgExt},
     col_value::ColValue,
-    dt_data::DtData,
+    dt_data::DtItem,
     pg::{pg_col_type::PgColType, pg_meta_manager::PgMetaManager, pg_tb_meta::PgTbMeta},
+    position::Position,
     row_data::RowData,
 };
 
@@ -28,7 +29,7 @@ pub struct PgSnapshotExtractor {
     pub conn_pool: Pool<Postgres>,
     pub meta_manager: PgMetaManager,
     pub resumer: SnapshotResumer,
-    pub buffer: Arc<ConcurrentQueue<DtData>>,
+    pub buffer: Arc<ConcurrentQueue<DtItem>>,
     pub slice_size: usize,
     pub schema: String,
     pub tb: String,
@@ -97,7 +98,7 @@ impl PgSnapshotExtractor {
         let mut rows = sqlx::query(&sql).fetch(&self.conn_pool);
         while let Some(row) = rows.try_next().await.unwrap() {
             let row_data = RowData::from_pg_row(&row, tb_meta);
-            BaseExtractor::push_row(self.buffer.as_ref(), row_data)
+            BaseExtractor::push_row(self.buffer.as_ref(), row_data, Position::None)
                 .await
                 .unwrap();
             all_count += 1;
@@ -140,13 +141,18 @@ impl PgSnapshotExtractor {
             let mut rows = query.fetch(&self.conn_pool);
             let mut slice_count = 0usize;
             while let Some(row) = rows.try_next().await.unwrap() {
-                let mut row_data = RowData::from_pg_row(&row, tb_meta);
+                let row_data = RowData::from_pg_row(&row, tb_meta);
                 start_value =
                     PgColValueConvertor::from_query(&row, order_col, order_col_type).unwrap();
-                if let Some(value) = start_value.to_option_string() {
-                    row_data.position = format!("{}:{}", order_col, value)
-                }
-                BaseExtractor::push_row(self.buffer.as_ref(), row_data)
+                let position = if let Some(value) = start_value.to_option_string() {
+                    Position::RdbSnapshot {
+                        order_col: order_col.into(),
+                        value,
+                    }
+                } else {
+                    Position::None
+                };
+                BaseExtractor::push_row(self.buffer.as_ref(), row_data, position)
                     .await
                     .unwrap();
                 slice_count += 1;

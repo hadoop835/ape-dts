@@ -10,6 +10,7 @@ use dt_meta::redis::redis_object::RedisCmd;
 use url::Url;
 
 pub struct RedisClient {
+    pub url: String,
     stream: BufReader<TcpStream>,
 }
 
@@ -25,6 +26,7 @@ impl RedisClient {
             .await
             .unwrap();
         let mut me = Self {
+            url: url.into(),
             stream: BufReader::new(stream),
         };
 

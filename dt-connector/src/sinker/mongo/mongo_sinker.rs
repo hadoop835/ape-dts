@@ -55,14 +55,18 @@ impl MongoSinker {
                 RowType::Insert => {
                     let after = row_data.after.as_mut().unwrap();
                     if let Some(ColValue::MongoDoc(doc)) = after.remove(MongoConstants::DOC) {
-                        self.upsert(&collection, doc.clone(), doc).await.unwrap();
+                        let query_doc =
+                            doc! {MongoConstants::ID: doc.get(MongoConstants::ID).unwrap()};
+                        self.upsert(&collection, query_doc, doc).await.unwrap();
                     }
                 }
 
                 RowType::Delete => {
                     let before = row_data.before.as_mut().unwrap();
                     if let Some(ColValue::MongoDoc(doc)) = before.remove(MongoConstants::DOC) {
-                        collection.delete_one(doc, None).await.unwrap();
+                        let query_doc =
+                            doc! {MongoConstants::ID: doc.get(MongoConstants::ID).unwrap()};
+                        collection.delete_one(query_doc, None).await.unwrap();
                     }
                 }
 
@@ -72,7 +76,7 @@ impl MongoSinker {
 
                     let query_doc =
                         if let Some(ColValue::MongoDoc(doc)) = before.remove(MongoConstants::DOC) {
-                            Some(doc)
+                            Some(doc! {MongoConstants::ID: doc.get(MongoConstants::ID).unwrap()})
                         } else {
                             None
                         };
@@ -89,7 +93,7 @@ impl MongoSinker {
                             None
                         };
 
-                    if query_doc.is_some() && query_doc.is_some() {
+                    if query_doc.is_some() && update_doc.is_some() {
                         self.upsert(&collection, query_doc.unwrap(), update_doc.unwrap())
                             .await
                             .unwrap();
@@ -164,6 +168,7 @@ impl MongoSinker {
         update_doc: Document,
     ) -> Result<(), Error> {
         let update = doc! {MongoConstants::SET: update_doc};
+        println!("query_doc: {:?}, update: {:?}", query_doc, update);
         let options = UpdateOptions::builder().upsert(true).build();
         collection
             .update_one(query_doc, update, Some(options))
