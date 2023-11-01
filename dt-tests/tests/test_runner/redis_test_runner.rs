@@ -3,11 +3,11 @@ use std::collections::HashMap;
 use super::base_test_runner::BaseTestRunner;
 use dt_common::{
     config::{
-        config_token_parser::ConfigTokenParser, extractor_config::ExtractorConfig,
-        sinker_config::SinkerConfig, task_config::TaskConfig,
+        config_enums::DbType, config_token_parser::ConfigTokenParser,
+        extractor_config::ExtractorConfig, sinker_config::SinkerConfig, task_config::TaskConfig,
     },
     error::Error,
-    utils::time_util::TimeUtil,
+    utils::{rdb_filter::RdbFilter, time_util::TimeUtil},
 };
 use dt_connector::sinker::redis::cmd_encoder::CmdEncoder;
 use dt_meta::redis::redis_object::RedisCmd;
@@ -17,7 +17,13 @@ use redis::{Connection, ConnectionLike, Value};
 const SRC: &str = "src";
 const DST: &str = "dst";
 
-const SYSTEM_KEYS: [&str; 4] = ["backup1", "backup2", "backup3", "backup4"];
+const SYSTEM_KEYS: [&str; 5] = [
+    "backup1",
+    "backup2",
+    "backup3",
+    "backup4",
+    "ape_dts_heartbeat_key",
+];
 
 pub struct RedisTestRunner {
     pub base: BaseTestRunner,
@@ -25,6 +31,7 @@ pub struct RedisTestRunner {
     dst_conn: Connection,
     delimiters: Vec<char>,
     escape_pairs: Vec<(char, char)>,
+    filter: RdbFilter,
 }
 
 impl RedisTestRunner {
@@ -56,12 +63,14 @@ impl RedisTestRunner {
             }
         };
 
+        let filter = RdbFilter::from_config(&config.filter, DbType::Redis)?;
         Ok(Self {
             base,
             src_conn,
             dst_conn,
             delimiters,
             escape_pairs,
+            filter,
         })
     }
 
@@ -104,14 +113,14 @@ impl RedisTestRunner {
 
     fn compare_all_data(&mut self) -> Result<(), Error> {
         let dbs = self.list_dbs(SRC);
-        for db in dbs {
+        for db in dbs.iter() {
             println!("compare data for db: {}", db);
             self.compare_data(db)?;
         }
         Ok(())
     }
 
-    fn compare_data(&mut self, db: String) -> Result<(), Error> {
+    fn compare_data(&mut self, db: &str) -> Result<(), Error> {
         self.execute_cmd(SRC, &format!("SELECT {}", db));
         self.execute_cmd(DST, &format!("SELECT {}", db));
 
@@ -147,15 +156,15 @@ impl RedisTestRunner {
             }
         }
 
-        self.compare_string_entries(&string_keys);
-        self.compare_hash_entries(&hash_keys);
-        self.compare_list_entries(&list_keys);
-        self.compare_set_entries(&set_keys);
-        self.compare_zset_entries(&zset_keys);
-        self.compare_stream_entries(&stream_keys);
-        self.compare_rejson_entries(&json_keys);
-        self.compare_bf_bloom_entries(&bf_bloom_keys);
-        self.compare_cf_bloom_entries(&cf_bloom_keys);
+        self.compare_string_entries(db, &string_keys);
+        self.compare_hash_entries(db, &hash_keys);
+        self.compare_list_entries(db, &list_keys);
+        self.compare_set_entries(db, &set_keys);
+        self.compare_zset_entries(db, &zset_keys);
+        self.compare_stream_entries(db, &stream_keys);
+        self.compare_rejson_entries(db, &json_keys);
+        self.compare_bf_bloom_entries(db, &bf_bloom_keys);
+        self.compare_cf_bloom_entries(db, &cf_bloom_keys);
         self.check_expire(&keys);
         Ok(())
     }
@@ -190,14 +199,14 @@ impl RedisTestRunner {
         }
     }
 
-    fn compare_string_entries(&mut self, keys: &Vec<String>) {
+    fn compare_string_entries(&mut self, db: &str, keys: &Vec<String>) {
         for key in keys {
             let cmd = format!("GET {}", self.escape_key(key));
-            self.compare_cmd_results(&cmd);
+            self.compare_cmd_results(&cmd, db, key);
         }
     }
 
-    fn compare_hash_entries(&mut self, keys: &Vec<String>) {
+    fn compare_hash_entries(&mut self, db: &str, keys: &Vec<String>) {
         for key in keys {
             let cmd = format!("HGETALL {}", self.escape_key(key));
             let src_result = self.execute_cmd(SRC, &cmd);
@@ -227,67 +236,82 @@ impl RedisTestRunner {
                 "compare results for cmd: {}, \r\n src_kvs: {:?} \r\n dst_kvs: {:?}",
                 cmd, src_kvs, dst_kvs
             );
-            assert_eq!(src_kvs, dst_kvs);
+
+            if self.filter.filter_db(db) {
+                println!("filtered, db: {}, key: {}", db, key);
+                assert_eq!(dst_kvs.len(), 0);
+            } else {
+                assert_eq!(src_kvs, dst_kvs);
+            }
         }
     }
 
-    fn compare_list_entries(&mut self, keys: &Vec<String>) {
+    fn compare_list_entries(&mut self, db: &str, keys: &Vec<String>) {
         for key in keys {
             let cmd = format!("LRANGE {} 0 -1", self.escape_key(key));
-            self.compare_cmd_results(&cmd);
+            self.compare_cmd_results(&cmd, db, key);
         }
     }
 
-    fn compare_set_entries(&mut self, keys: &Vec<String>) {
+    fn compare_set_entries(&mut self, db: &str, keys: &Vec<String>) {
         for key in keys {
             let cmd = format!("SORT {} ALPHA", self.escape_key(key));
-            self.compare_cmd_results(&cmd);
+            self.compare_cmd_results(&cmd, db, key);
         }
     }
 
-    fn compare_zset_entries(&mut self, keys: &Vec<String>) {
+    fn compare_zset_entries(&mut self, db: &str, keys: &Vec<String>) {
         for key in keys {
             let cmd = format!("ZRANGE {} 0 -1 WITHSCORES", self.escape_key(key));
-            self.compare_cmd_results(&cmd);
+            self.compare_cmd_results(&cmd, db, key);
         }
     }
 
-    fn compare_stream_entries(&mut self, keys: &Vec<String>) {
+    fn compare_stream_entries(&mut self, db: &str, keys: &Vec<String>) {
         for key in keys {
             let cmd = format!("XRANGE {} - +", self.escape_key(key));
-            self.compare_cmd_results(&cmd);
+            self.compare_cmd_results(&cmd, db, key);
         }
     }
 
-    fn compare_rejson_entries(&mut self, keys: &Vec<String>) {
+    fn compare_rejson_entries(&mut self, db: &str, keys: &Vec<String>) {
         for key in keys {
             let cmd = format!("JSON.GET {}", self.escape_key(key));
-            self.compare_cmd_results(&cmd);
+            self.compare_cmd_results(&cmd, db, key);
         }
     }
 
-    fn compare_bf_bloom_entries(&mut self, keys: &Vec<String>) {
+    fn compare_bf_bloom_entries(&mut self, db: &str, keys: &Vec<String>) {
         for key in keys {
             let cmd = format!("BF.DEBUG {}", self.escape_key(key));
-            self.compare_cmd_results(&cmd);
+            self.compare_cmd_results(&cmd, db, key);
         }
     }
 
-    fn compare_cf_bloom_entries(&mut self, keys: &Vec<String>) {
+    fn compare_cf_bloom_entries(&mut self, db: &str, keys: &Vec<String>) {
         for key in keys {
             let cmd = format!("CF.DEBUG {}", self.escape_key(key));
-            self.compare_cmd_results(&cmd);
+            self.compare_cmd_results(&cmd, db, key);
         }
     }
 
-    fn compare_cmd_results(&mut self, cmd: &str) {
+    fn compare_cmd_results(&mut self, cmd: &str, db: &str, key: &str) {
         let src_result = self.execute_cmd(SRC, cmd);
         let dst_result = self.execute_cmd(DST, cmd);
         println!(
             "compare results for cmd: {}, \r\n src_kvs: {:?} \r\n dst_kvs: {:?}",
             cmd, src_result, dst_result
         );
-        assert_eq!(src_result, dst_result);
+
+        if self.filter.filter_db(db) {
+            println!("filtered, db: {}, key: {}", db, key);
+            match dst_result {
+                Value::Bulk(v) => assert_eq!(v, vec![]),
+                _ => assert_eq!(dst_result, Value::Nil),
+            }
+        } else {
+            assert_eq!(src_result, dst_result);
+        }
     }
 
     fn list_dbs(&mut self, from: &str) -> Vec<String> {

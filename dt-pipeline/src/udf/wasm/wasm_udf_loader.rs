@@ -1,5 +1,5 @@
 use dt_common::error::Error;
-use dt_meta::row_data::RowData;
+use dt_meta::{avro::avro_converter::AvroConverter, row_data::RowData};
 use serde_json;
 use std::fs;
 use wasmer::{Instance, Memory, Module, Store, Value};
@@ -12,6 +12,7 @@ pub struct WasmUdfLoader {
     pub store: Option<Store>,
     pub instance: Option<Instance>,
     pub wasi_env: Option<WasiFunctionEnv>,
+    pub avro_converter: AvroConverter,
 }
 
 impl WasmUdfLoader {
@@ -37,10 +38,12 @@ impl WasmUdfLoader {
     }
 
     pub fn work_with_data(&mut self, data: RowData) -> Result<RowData, Error> {
-        let (store, instance, wasi_env) = self.get_basic_info()?;
+        let (store, instance, wasi_env, converter) = self.get_basic_info()?;
 
         let work_func = instance.exports.get_function(WASM_WORK_FUNC).unwrap();
-        let datas_str = serde_json::to_string(&data).unwrap();
+        let avro_data = converter.row_data_to_avro_value(data)?;
+
+        let datas_str = serde_json::to_string(&avro_data).unwrap();
         let data_bytes = datas_str.as_bytes();
 
         let memory = instance.exports.get_memory("memory").unwrap();
@@ -52,10 +55,10 @@ impl WasmUdfLoader {
             .unwrap();
 
         let result_ptr = result[0].unwrap_i32() as usize;
-        let result_str =
-            WasmUdfLoader::read_string_from_memory(memory, &store, result_ptr).unwrap();
+        let result_bytes =
+            WasmUdfLoader::read_bytes_from_memory(memory, &store, result_ptr).unwrap();
 
-        let result_data: RowData = serde_json::from_str(result_str.as_str()).unwrap();
+        let result_data = converter.avro_value_to_row_data(result_bytes.as_slice())?;
 
         WasmUdfLoader::wasm_free_mem(store, instance, wasi_env, result_ptr)?;
 
@@ -76,7 +79,9 @@ impl WasmUdfLoader {
         Ok(())
     }
 
-    fn get_basic_info(&mut self) -> Result<(&mut Store, &Instance, &WasiFunctionEnv), Error> {
+    fn get_basic_info(
+        &mut self,
+    ) -> Result<(&mut Store, &Instance, &WasiFunctionEnv, &AvroConverter), Error> {
         let store = if let Some(i) = &mut self.store {
             i
         } else {
@@ -93,14 +98,14 @@ impl WasmUdfLoader {
             return Err(Error::UdfError("wasm udf wasi env is not init".to_string()));
         };
 
-        Ok((store, instance, wasi_env))
+        Ok((store, instance, wasi_env, &self.avro_converter))
     }
 
-    fn read_string_from_memory(
+    fn read_bytes_from_memory(
         memory: &Memory,
         store: &Store,
         ptr: usize,
-    ) -> Result<String, Error> {
+    ) -> Result<Vec<u8>, Error> {
         let memory_view = memory.view(store);
 
         let mut result = Vec::new();
@@ -114,6 +119,6 @@ impl WasmUdfLoader {
             offset += 1;
         }
 
-        Ok(String::from_utf8(result)?)
+        Ok(result)
     }
 }

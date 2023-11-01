@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use concurrent_queue::ConcurrentQueue;
 use dt_common::error::Error;
 use dt_connector::Sinker;
-use dt_meta::{ddl_data::DdlData, dt_data::DtData, row_data::RowData};
+use dt_meta::{ddl_data::DdlData, dt_data::DtItem, row_data::RowData};
 
 use crate::{Merger, Parallelizer};
 
@@ -22,7 +22,7 @@ impl Parallelizer for CheckParallelizer {
         "CheckParallelizer".to_string()
     }
 
-    async fn drain(&mut self, buffer: &ConcurrentQueue<DtData>) -> Result<Vec<DtData>, Error> {
+    async fn drain(&mut self, buffer: &ConcurrentQueue<DtItem>) -> Result<Vec<DtItem>, Error> {
         self.base_parallelizer.drain(buffer)
     }
 

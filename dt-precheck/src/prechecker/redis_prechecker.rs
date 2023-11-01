@@ -5,6 +5,7 @@ use concurrent_queue::ConcurrentQueue;
 use dt_common::{
     config::{config_enums::DbType, extractor_config::ExtractorConfig, task_config::TaskConfig},
     error::Error,
+    utils::rdb_filter::RdbFilter,
 };
 use dt_connector::extractor::redis::{
     redis_client::RedisClient, redis_psync_extractor::RedisPsyncExtractor,
@@ -69,6 +70,7 @@ impl Prechecker for RedisPrechecker {
         let mut conn = RedisClient::new(&self.fetcher.url).await?;
         let buffer = Arc::new(ConcurrentQueue::bounded(1));
 
+        let filter = RdbFilter::from_config(&self.task_config.filter, DbType::Redis)?;
         let mut psyncer = RedisPsyncExtractor {
             conn: &mut conn,
             run_id: String::new(),
@@ -76,6 +78,7 @@ impl Prechecker for RedisPrechecker {
             now_db_id: 0,
             repl_port,
             buffer,
+            filter,
         };
 
         if let Err(error) = psyncer.start_psync().await {

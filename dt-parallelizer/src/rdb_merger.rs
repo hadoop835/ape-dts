@@ -108,7 +108,6 @@ impl RdbMerger {
                         tb: delete.tb,
                         before: delete.before,
                         after: insert.after,
-                        position: delete.position,
                     };
                     merged.unmerged_rows.push(row_data);
                     return Ok(());
@@ -179,7 +178,6 @@ impl RdbMerger {
             tb: row_data.tb.clone(),
             before: row_data.before,
             after: Option::None,
-            position: row_data.position.clone(),
         };
 
         let insert_row = RowData {
@@ -188,7 +186,6 @@ impl RdbMerger {
             tb: row_data.tb,
             before: Option::None,
             after: row_data.after,
-            position: row_data.position,
         };
 
         Ok((delete_row, insert_row))

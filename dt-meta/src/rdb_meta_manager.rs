@@ -7,6 +7,7 @@ use super::{
     rdb_tb_meta::RdbTbMeta,
 };
 
+#[derive(Clone)]
 pub struct RdbMetaManager {
     mysql_meta_manager: Option<MysqlMetaManager>,
     pg_meta_manager: Option<PgMetaManager>,

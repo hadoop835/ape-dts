@@ -76,4 +76,10 @@ mod test {
     async fn cdc_rewrite_stream_test() {
         TestBase::run_redis_snapshot_test("redis_to_redis/snapshot/7_0/rewrite_stream_test").await;
     }
+
+    #[tokio::test]
+    #[serial]
+    async fn cdc_filter_db_test() {
+        TestBase::run_redis_snapshot_test("redis_to_redis/snapshot/7_0/filter_db_test").await;
+    }
 }

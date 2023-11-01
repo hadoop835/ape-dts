@@ -3,7 +3,7 @@ use std::sync::{atomic::AtomicBool, Arc};
 use concurrent_queue::ConcurrentQueue;
 
 use dt_common::error::Error;
-use dt_meta::dt_data::DtData;
+use dt_meta::dt_data::DtItem;
 
 use crate::{
     check_log::{check_log::CheckLog, log_reader::LogReader},
@@ -14,7 +14,7 @@ use super::base_extractor::BaseExtractor;
 
 pub struct BaseCheckExtractor {
     pub check_log_dir: String,
-    pub buffer: Arc<ConcurrentQueue<DtData>>,
+    pub buffer: Arc<ConcurrentQueue<DtItem>>,
     pub batch_size: usize,
     pub shut_down: Arc<AtomicBool>,
 }

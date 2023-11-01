@@ -326,6 +326,7 @@ impl MongoTestRunner {
     }
 
     async fn compare_tb_data(&self, db: &str, tb: &str) {
+        println!("compare tb data, db: {}, tb: {}", db, tb);
         let src_data = self.fetch_data(db, tb, SRC).await;
         let dst_data = self.fetch_data(db, tb, DST).await;
 

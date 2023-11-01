@@ -12,7 +12,7 @@ use dt_common::{
     error::Error,
     utils::rdb_filter::RdbFilter,
 };
-use dt_meta::{dt_data::DtData, struct_meta::database_model::StructModel};
+use dt_meta::{dt_data::DtItem, struct_meta::database_model::StructModel};
 use dt_task::extractor_util::ExtractorUtil;
 
 use super::rdb_test_runner::RdbTestRunner;
@@ -151,13 +151,13 @@ impl RdbStructTestRunner {
         String,
         Vec<String>,
         RdbFilter,
-        ConcurrentQueue<DtData>,
+        ConcurrentQueue<DtItem>,
         AtomicBool,
     ) {
         let config = TaskConfig::new(&self.base.base.task_config_file);
         let filter =
             RdbFilter::from_config(&config.filter, config.extractor.get_db_type()).unwrap();
-        let buffer: ConcurrentQueue<DtData> = ConcurrentQueue::bounded(10000);
+        let buffer: ConcurrentQueue<DtItem> = ConcurrentQueue::bounded(10000);
         let shut_down = AtomicBool::new(false);
         let log_level = "info".to_string();
 

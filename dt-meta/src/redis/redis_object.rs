@@ -131,6 +131,10 @@ impl RedisString {
     pub fn as_bytes(&self) -> &[u8] {
         &self.bytes
     }
+
+    pub fn to_string(&self) -> String {
+        String::from_utf8_lossy(&self.bytes).to_string()
+    }
 }
 
 impl From<Vec<u8>> for RedisString {
@@ -192,10 +196,14 @@ impl RedisCmd {
     }
 
     pub fn get_name(&self) -> String {
-        if self.args.is_empty() {
+        return self.get_str_arg(0);
+    }
+
+    pub fn get_str_arg(&self, idx: usize) -> String {
+        if self.args.len() <= idx {
             String::new()
         } else {
-            String::from_utf8(self.args[0].clone()).unwrap()
+            String::from_utf8(self.args[idx].clone()).unwrap()
         }
     }
 

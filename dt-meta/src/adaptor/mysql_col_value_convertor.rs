@@ -131,14 +131,22 @@ impl MysqlColValueConvertor {
             ColumnValue::String(v) => {
                 // when the type is binary(length), the value shoud be right-padded with '\0' to the specified length,
                 // otherwise the comparison will fail. https://dev.mysql.com/doc/refman/8.0/en/binary-varbinary.html
-                if let MysqlColType::Binary { length } = *col_type {
+                let final_v = if let MysqlColType::Binary { length } = *col_type {
                     if length as usize > v.len() {
                         let pad_v: Vec<u8> = vec![0; length as usize - v.len()];
-                        let final_v = [v, pad_v].concat();
-                        return Ok(ColValue::Blob(final_v));
+                        [v, pad_v].concat()
+                    } else {
+                        v
                     }
+                } else {
+                    v
+                };
+
+                if let Ok(str) = String::from_utf8(final_v.clone()) {
+                    ColValue::String(str)
+                } else {
+                    ColValue::Blob(final_v)
                 }
-                ColValue::Blob(v)
             }
 
             ColumnValue::Blob(v) => ColValue::Blob(v),

@@ -40,3 +40,4 @@ redis = { workspace = true }
 thiserror = { workspace = true }
 async-std = { workspace = true }
 chrono =  { workspace = true }
+apache-avro = {workspace = true}

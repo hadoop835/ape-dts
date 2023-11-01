@@ -11,11 +11,14 @@ use dt_common::{
         extractor_config::ExtractorConfig, sinker_config::SinkerConfig, task_config::TaskConfig,
     },
     error::Error,
-    syncer::Syncer,
     utils::rdb_filter::RdbFilter,
 };
 use dt_connector::{extractor::snapshot_resumer::SnapshotResumer, Extractor};
-use dt_meta::{dt_data::DtData, row_type::RowType};
+
+use dt_meta::{
+    avro::avro_converter::AvroConverter, dt_data::DtItem, position::Position, row_type::RowType,
+    syncer::Syncer,
+};
 use dt_pipeline::{
     base_pipeline::BasePipeline, udf::wasm::wasm_udf_loader::WasmUdfLoader, Pipeline,
 };
@@ -131,7 +134,7 @@ impl TaskRunner {
         let buffer = Arc::new(ConcurrentQueue::bounded(self.config.pipeline.buffer_size));
         let shut_down = Arc::new(AtomicBool::new(false));
         let syncer = Arc::new(Mutex::new(Syncer {
-            checkpoint_position: String::new(),
+            checkpoint_position: Position::None,
         }));
 
         let mut extractor = self
@@ -161,7 +164,7 @@ impl TaskRunner {
 
     async fn create_pipeline(
         &self,
-        buffer: Arc<ConcurrentQueue<DtData>>,
+        buffer: Arc<ConcurrentQueue<DtItem>>,
         shut_down: Arc<AtomicBool>,
         syncer: Arc<Mutex<Syncer>>,
     ) -> Result<Box<dyn Pipeline + Send>, Error> {
@@ -177,7 +180,9 @@ impl TaskRunner {
                 store: None,
                 instance: None,
                 wasi_env: None,
+                avro_converter: AvroConverter::new(None),
             };
+
             loader.init_instance(self.config.pipeline.wasm_plugin.to_owned());
             Some(loader)
         };
@@ -200,7 +205,7 @@ impl TaskRunner {
     async fn create_extractor(
         &self,
         extractor_config: &ExtractorConfig,
-        buffer: Arc<ConcurrentQueue<DtData>>,
+        buffer: Arc<ConcurrentQueue<DtItem>>,
         shut_down: Arc<AtomicBool>,
         syncer: Arc<Mutex<Syncer>>,
     ) -> Result<Box<dyn Extractor + Send>, Error> {
@@ -390,8 +395,9 @@ impl TaskRunner {
             }
 
             ExtractorConfig::RedisSnapshot { url, repl_port } => {
+                let filter = RdbFilter::from_config(&self.config.filter, DbType::Redis)?;
                 let extractor = ExtractorUtil::create_redis_snapshot_extractor(
-                    url, *repl_port, buffer, shut_down,
+                    url, *repl_port, buffer, filter, shut_down,
                 )
                 .await?;
                 Box::new(extractor)
@@ -404,7 +410,9 @@ impl TaskRunner {
                 now_db_id,
                 repl_port,
                 heartbeat_interval_secs,
+                heartbeat_key,
             } => {
+                let filter = RdbFilter::from_config(&self.config.filter, DbType::Redis)?;
                 let extractor = ExtractorUtil::create_redis_cdc_extractor(
                     url,
                     run_id,
@@ -412,7 +420,9 @@ impl TaskRunner {
                     *repl_port,
                     *now_db_id,
                     *heartbeat_interval_secs,
+                    heartbeat_key,
                     buffer,
+                    filter,
                     shut_down,
                     syncer,
                 )
@@ -435,6 +445,7 @@ impl TaskRunner {
                     *partition,
                     *offset,
                     *ack_interval_secs,
+                    &self.config.sinker_basic,
                     buffer,
                     shut_down,
                     syncer,

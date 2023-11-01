@@ -1,9 +1,12 @@
 use async_trait::async_trait;
 use concurrent_queue::ConcurrentQueue;
 use dt_common::log_position;
+use dt_common::utils::rdb_filter::RdbFilter;
 use dt_common::utils::time_util::TimeUtil;
 use dt_common::{error::Error, log_info};
-use dt_meta::dt_data::DtData;
+use dt_meta::dt_data::{DtData, DtItem};
+use dt_meta::position::Position;
+use dt_meta::redis::redis_entry::RedisEntry;
 use dt_meta::redis::redis_object::RedisCmd;
 
 use std::sync::Arc;
@@ -17,11 +20,12 @@ use super::redis_client::RedisClient;
 
 pub struct RedisPsyncExtractor<'a> {
     pub conn: &'a mut RedisClient,
-    pub buffer: Arc<ConcurrentQueue<DtData>>,
+    pub buffer: Arc<ConcurrentQueue<DtItem>>,
     pub run_id: String,
     pub repl_offset: u64,
     pub now_db_id: i64,
     pub repl_port: u64,
+    pub filter: RdbFilter,
 }
 
 #[async_trait]
@@ -134,11 +138,8 @@ impl RedisPsyncExtractor<'_> {
 
         loop {
             if let Some(entry) = loader.load_entry()? {
-                while self.buffer.is_full() {
-                    TimeUtil::sleep_millis(1).await;
-                }
                 self.now_db_id = entry.db_id;
-                self.buffer.push(DtData::Redis { entry }).unwrap();
+                Self::push_to_buf(&self.buffer, &mut self.filter, entry, Position::None).await;
             }
 
             if loader.is_end {
@@ -147,6 +148,7 @@ impl RedisPsyncExtractor<'_> {
             }
         }
 
+        // this log to mark the snapshot rdb was all received
         log_position!(
             "current_position | {}",
             format!(
@@ -159,5 +161,28 @@ impl RedisPsyncExtractor<'_> {
         );
 
         Ok(())
+    }
+
+    pub async fn push_to_buf(
+        buffer: &Arc<ConcurrentQueue<DtItem>>,
+        filter: &mut RdbFilter,
+        entry: RedisEntry,
+        position: Position,
+    ) {
+        // currently only support db filter
+        let db_id = &entry.db_id.to_string();
+        if filter.filter_db(db_id) {
+            return;
+        }
+
+        while buffer.is_full() {
+            TimeUtil::sleep_millis(1).await;
+        }
+
+        let item = DtItem {
+            dt_data: DtData::Redis { entry },
+            position,
+        };
+        buffer.push(item).unwrap();
     }
 }

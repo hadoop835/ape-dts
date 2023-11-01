@@ -44,6 +44,8 @@ impl RdbKafkaRdbTestRunner {
     ) -> Result<(), Error> {
         self.src_to_dst_runner.execute_test_ddl_sqls().await?;
         self.prepare_kafka().await?;
+        // wait for topic creation
+        TimeUtil::sleep_millis(start_millis).await;
 
         // prepare src data
         self.src_to_dst_runner.execute_test_dml_sqls().await?;

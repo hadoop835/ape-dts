@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use concurrent_queue::ConcurrentQueue;
 use dt_common::error::Error;
 use dt_connector::Sinker;
-use dt_meta::dt_data::DtData;
+use dt_meta::dt_data::{DtData, DtItem};
 
 use crate::Parallelizer;
 
@@ -21,7 +21,7 @@ impl Parallelizer for RedisParallelizer {
         "RedisParallelizer".to_string()
     }
 
-    async fn drain(&mut self, buffer: &ConcurrentQueue<DtData>) -> Result<Vec<DtData>, Error> {
+    async fn drain(&mut self, buffer: &ConcurrentQueue<DtItem>) -> Result<Vec<DtItem>, Error> {
         self.base_parallelizer.drain(buffer)
     }
 

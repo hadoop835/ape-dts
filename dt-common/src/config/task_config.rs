@@ -150,9 +150,9 @@ impl TaskConfig {
 
                 ExtractType::Cdc => ExtractorConfig::MongoCdc {
                     url,
-                    resume_token: Self::get_optional_value(ini, EXTRACTOR, "resume_token"),
-                    start_timestamp: Self::get_optional_value(ini, EXTRACTOR, "start_timestamp"),
-                    source: Self::get_optional_value(ini, EXTRACTOR, "source"),
+                    resume_token: Self::get_value(ini, EXTRACTOR, "resume_token"),
+                    start_timestamp: Self::get_value(ini, EXTRACTOR, "start_timestamp"),
+                    source: Self::get_value(ini, EXTRACTOR, "source"),
                 },
 
                 extract_type => {
@@ -177,6 +177,12 @@ impl TaskConfig {
                             .getuint(EXTRACTOR, "heartbeat_interval_secs")
                             .unwrap()
                             .unwrap(),
+                        heartbeat_key: Self::get_value_with_default(
+                            ini,
+                            EXTRACTOR,
+                            "heartbeat_key",
+                            "ape_dts_heartbeat_key".into(),
+                        ),
                         now_db_id: ini.getint(EXTRACTOR, "now_db_id").unwrap().unwrap(),
                     },
 
@@ -193,9 +199,9 @@ impl TaskConfig {
                 url,
                 group: ini.get(EXTRACTOR, "group").unwrap(),
                 topic: ini.get(EXTRACTOR, "topic").unwrap(),
-                partition: Self::get_optional_value(ini, EXTRACTOR, "partition"),
-                offset: Self::get_optional_value(ini, EXTRACTOR, "offset"),
-                ack_interval_secs: Self::get_optional_value(ini, EXTRACTOR, "ack_interval_secs"),
+                partition: Self::get_value(ini, EXTRACTOR, "partition"),
+                offset: Self::get_value(ini, EXTRACTOR, "offset"),
+                ack_interval_secs: Self::get_value(ini, EXTRACTOR, "ack_interval_secs"),
             },
 
             db_type => {
@@ -212,7 +218,7 @@ impl TaskConfig {
         let db_type = DbType::from_str(&ini.get(SINKER, DB_TYPE).unwrap()).unwrap();
         let sink_type = SinkType::from_str(&ini.get(SINKER, "sink_type").unwrap()).unwrap();
         let url = ini.get(SINKER, URL).unwrap();
-        let batch_size: usize = Self::get_optional_value(ini, SINKER, BATCH_SIZE);
+        let batch_size: usize = Self::get_value(ini, SINKER, BATCH_SIZE);
 
         let basic = SinkerBasicConfig {
             db_type: db_type.clone(),
@@ -220,7 +226,7 @@ impl TaskConfig {
             batch_size,
         };
 
-        let conflict_policy_str: String = Self::get_optional_value(ini, SINKER, "conflict_policy");
+        let conflict_policy_str: String = Self::get_value(ini, SINKER, "conflict_policy");
         let conflict_policy = ConflictPolicyEnum::from_str(&conflict_policy_str).unwrap();
 
         let sinker = match db_type {
@@ -290,7 +296,7 @@ impl TaskConfig {
             DbType::Redis => SinkerConfig::Redis {
                 url,
                 batch_size,
-                method: Self::get_optional_value(ini, SINKER, "method"),
+                method: Self::get_value(ini, SINKER, "method"),
             },
         };
         Ok((basic, sinker))
@@ -326,7 +332,7 @@ impl TaskConfig {
     fn load_pipeline_config(ini: &Ini) -> PipelineConfig {
         let buffer_size = ini.getuint(PIPELINE, "buffer_size").unwrap().unwrap() as usize;
         let batch_sink_interval_secs: u64 =
-            Self::get_optional_value(ini, PIPELINE, "batch_sink_interval_secs");
+            Self::get_value(ini, PIPELINE, "batch_sink_interval_secs");
         let checkpoint_interval_secs = ini
             .getuint(PIPELINE, "checkpoint_interval_secs")
             .unwrap()
@@ -417,16 +423,24 @@ impl TaskConfig {
         }
     }
 
-    fn get_optional_value<T>(ini: &Ini, section: &str, key: &str) -> T
+    fn get_value_with_default<T>(ini: &Ini, section: &str, key: &str, default: T) -> T
     where
-        T: Default,
         T: FromStr,
         <T as FromStr>::Err: Debug,
     {
         if let Some(value) = ini.get(section, key) {
             return value.parse::<T>().unwrap();
         }
-        T::default()
+        default
+    }
+
+    fn get_value<T>(ini: &Ini, section: &str, key: &str) -> T
+    where
+        T: Default,
+        T: FromStr,
+        <T as FromStr>::Err: Debug,
+    {
+        return Self::get_value_with_default(ini, section, key, T::default());
     }
 }
 

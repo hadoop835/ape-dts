@@ -10,8 +10,8 @@ use async_trait::async_trait;
 use concurrent_queue::ConcurrentQueue;
 use dt_common::{error::Error, log_info, utils::time_util::TimeUtil};
 use dt_meta::{
-    col_value::ColValue, dt_data::DtData, mongo::mongo_constant::MongoConstants, row_data::RowData,
-    row_type::RowType,
+    col_value::ColValue, dt_data::DtItem, mongo::mongo_constant::MongoConstants,
+    position::Position, row_data::RowData, row_type::RowType,
 };
 use mongodb::{
     bson::{doc, oid::ObjectId, Bson, Document},
@@ -26,7 +26,7 @@ use crate::{
 
 pub struct MongoSnapshotExtractor {
     pub resumer: SnapshotResumer,
-    pub buffer: Arc<ConcurrentQueue<DtData>>,
+    pub buffer: Arc<ConcurrentQueue<DtItem>>,
     pub db: String,
     pub tb: String,
     pub shut_down: Arc<AtomicBool>,
@@ -80,12 +80,14 @@ impl MongoSnapshotExtractor {
                 schema: self.db.clone(),
                 tb: self.tb.clone(),
                 row_type: RowType::Insert,
-                position: format!("{}:{}", MongoConstants::ID, id),
                 after: Some(after),
                 before: None,
             };
-
-            BaseExtractor::push_row(self.buffer.as_ref(), row_data)
+            let position = Position::RdbSnapshot {
+                order_col: MongoConstants::ID.into(),
+                value: id,
+            };
+            BaseExtractor::push_row(self.buffer.as_ref(), row_data, position)
                 .await
                 .unwrap();
             all_count += 1;
