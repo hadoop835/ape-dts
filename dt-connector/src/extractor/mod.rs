@@ -1,6 +1,6 @@
 pub mod base_check_extractor;
 pub mod base_extractor;
-pub mod kafka;
+// pub mod kafka;
 pub mod mongo;
 pub mod mysql;
 pub mod pg;

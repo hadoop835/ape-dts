@@ -409,29 +409,29 @@ impl TaskRunner {
                 Box::new(extractor)
             }
 
-            ExtractorConfig::Kafka {
-                url,
-                group,
-                topic,
-                partition,
-                offset,
-                ack_interval_secs,
-            } => {
-                let extractor = ExtractorUtil::create_kafka_extractor(
-                    url,
-                    group,
-                    topic,
-                    *partition,
-                    *offset,
-                    *ack_interval_secs,
-                    &self.config.sinker_basic,
-                    buffer,
-                    shut_down,
-                    syncer,
-                )
-                .await?;
-                Box::new(extractor)
-            }
+            // ExtractorConfig::Kafka {
+            //     url,
+            //     group,
+            //     topic,
+            //     partition,
+            //     offset,
+            //     ack_interval_secs,
+            // } => {
+            //     let extractor = ExtractorUtil::create_kafka_extractor(
+            //         url,
+            //         group,
+            //         topic,
+            //         *partition,
+            //         *offset,
+            //         *ack_interval_secs,
+            //         &self.config.sinker_basic,
+            //         buffer,
+            //         shut_down,
+            //         syncer,
+            //     )
+            //     .await?;
+            //     Box::new(extractor)
+            // }
         };
         Ok(extractor)
     }

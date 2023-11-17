@@ -19,7 +19,7 @@ use dt_connector::{
         mysql::mysql_transaction_marker::MysqlTransactionMarker, traits::DataMarkerFilter,
     },
     extractor::{
-        kafka::kafka_extractor::KafkaExtractor,
+        // kafka::kafka_extractor::KafkaExtractor,
         mongo::{
             mongo_cdc_extractor::MongoCdcExtractor,
             mongo_snapshot_extractor::MongoSnapshotExtractor,
@@ -451,48 +451,48 @@ impl ExtractorUtil {
         })
     }
 
-    pub async fn create_kafka_extractor(
-        url: &str,
-        group: &str,
-        topic: &str,
-        partition: i32,
-        offset: i64,
-        ack_interval_secs: u64,
-        sinker_basic_config: &SinkerBasicConfig,
-        buffer: Arc<ConcurrentQueue<DtItem>>,
-        shut_down: Arc<AtomicBool>,
-        syncer: Arc<Mutex<Syncer>>,
-    ) -> Result<KafkaExtractor, Error> {
-        // kafka extractor may need to get sinker meta data if sinker is RDB
-        let sinker_url = &sinker_basic_config.url;
-        let meta_manager = match sinker_basic_config.db_type {
-            DbType::Mysql => {
-                let conn_pool = TaskUtil::create_mysql_conn_pool(sinker_url, 1, true).await?;
-                let meta_manager = MysqlMetaManager::new(conn_pool.clone()).init().await?;
-                Some(RdbMetaManager::from_mysql(meta_manager))
-            }
-            DbType::Pg => {
-                let conn_pool = TaskUtil::create_pg_conn_pool(sinker_url, 1, true).await?;
-                let meta_manager = PgMetaManager::new(conn_pool.clone()).init().await?;
-                Some(RdbMetaManager::from_pg(meta_manager))
-            }
-            _ => None,
-        };
-        let avro_converter = AvroConverter::new(meta_manager);
+    // pub async fn create_kafka_extractor(
+    //     url: &str,
+    //     group: &str,
+    //     topic: &str,
+    //     partition: i32,
+    //     offset: i64,
+    //     ack_interval_secs: u64,
+    //     sinker_basic_config: &SinkerBasicConfig,
+    //     buffer: Arc<ConcurrentQueue<DtItem>>,
+    //     shut_down: Arc<AtomicBool>,
+    //     syncer: Arc<Mutex<Syncer>>,
+    // ) -> Result<KafkaExtractor, Error> {
+    //     // kafka extractor may need to get sinker meta data if sinker is RDB
+    //     let sinker_url = &sinker_basic_config.url;
+    //     let meta_manager = match sinker_basic_config.db_type {
+    //         DbType::Mysql => {
+    //             let conn_pool = TaskUtil::create_mysql_conn_pool(sinker_url, 1, true).await?;
+    //             let meta_manager = MysqlMetaManager::new(conn_pool.clone()).init().await?;
+    //             Some(RdbMetaManager::from_mysql(meta_manager))
+    //         }
+    //         DbType::Pg => {
+    //             let conn_pool = TaskUtil::create_pg_conn_pool(sinker_url, 1, true).await?;
+    //             let meta_manager = PgMetaManager::new(conn_pool.clone()).init().await?;
+    //             Some(RdbMetaManager::from_pg(meta_manager))
+    //         }
+    //         _ => None,
+    //     };
+    //     let avro_converter = AvroConverter::new(meta_manager);
 
-        Ok(KafkaExtractor {
-            url: url.into(),
-            group: group.into(),
-            topic: topic.into(),
-            partition,
-            offset,
-            ack_interval_secs,
-            buffer,
-            shut_down,
-            avro_converter,
-            syncer,
-        })
-    }
+    //     Ok(KafkaExtractor {
+    //         url: url.into(),
+    //         group: group.into(),
+    //         topic: topic.into(),
+    //         partition,
+    //         offset,
+    //         ack_interval_secs,
+    //         buffer,
+    //         shut_down,
+    //         avro_converter,
+    //         syncer,
+    //     })
+    // }
 
     pub fn datamarker_filter_builder(
         extractor_config: &ExtractorConfig,

@@ -31,8 +31,8 @@ regex = { workspace = true }
 reqwest = { workspace = true }
 futures = { workspace = true }
 uuid = { workspace = true }
-rdkafka = { workspace = true }
-kafka = { workspace = true }
+# rdkafka = { workspace = true }
+# kafka = { workspace = true }
 url = { workspace = true }
 log = { workspace = true }
 log4rs = { workspace = true }

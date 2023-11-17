@@ -39,12 +39,12 @@ pub enum SinkerConfig {
         conflict_policy: ConflictPolicyEnum,
     },
 
-    Kafka {
-        url: String,
-        batch_size: usize,
-        ack_timeout_secs: u64,
-        required_acks: String,
-    },
+    // Kafka {
+    //     url: String,
+    //     batch_size: usize,
+    //     ack_timeout_secs: u64,
+    //     required_acks: String,
+    // },
 
     OpenFaas {
         url: String,

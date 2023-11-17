@@ -195,14 +195,14 @@ impl TaskConfig {
                 }
             }
 
-            DbType::Kafka => ExtractorConfig::Kafka {
-                url,
-                group: ini.get(EXTRACTOR, "group").unwrap(),
-                topic: ini.get(EXTRACTOR, "topic").unwrap(),
-                partition: Self::get_value(ini, EXTRACTOR, "partition"),
-                offset: Self::get_value(ini, EXTRACTOR, "offset"),
-                ack_interval_secs: Self::get_value(ini, EXTRACTOR, "ack_interval_secs"),
-            },
+            // DbType::Kafka => ExtractorConfig::Kafka {
+            //     url,
+            //     group: ini.get(EXTRACTOR, "group").unwrap(),
+            //     topic: ini.get(EXTRACTOR, "topic").unwrap(),
+            //     partition: Self::get_value(ini, EXTRACTOR, "partition"),
+            //     offset: Self::get_value(ini, EXTRACTOR, "offset"),
+            //     ack_interval_secs: Self::get_value(ini, EXTRACTOR, "ack_interval_secs"),
+            // },
 
             db_type => {
                 return Err(Error::ConfigError(format!(
@@ -271,12 +271,12 @@ impl TaskConfig {
                 }
             },
 
-            DbType::Kafka => SinkerConfig::Kafka {
-                url,
-                batch_size,
-                ack_timeout_secs: ini.getuint(SINKER, "ack_timeout_secs").unwrap().unwrap(),
-                required_acks: ini.get(SINKER, "required_acks").unwrap(),
-            },
+            // DbType::Kafka => SinkerConfig::Kafka {
+            //     url,
+            //     batch_size,
+            //     ack_timeout_secs: ini.getuint(SINKER, "ack_timeout_secs").unwrap().unwrap(),
+            //     required_acks: ini.get(SINKER, "required_acks").unwrap(),
+            // },
 
             DbType::OpenFaas => SinkerConfig::OpenFaas {
                 url,

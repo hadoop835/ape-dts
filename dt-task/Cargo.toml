@@ -21,8 +21,8 @@ tokio = { workspace = true }
 concurrent-queue = { workspace = true }
 reqwest = { workspace = true }
 futures = { workspace = true }
-rdkafka = { workspace = true }
-kafka = { workspace = true }
+# rdkafka = { workspace = true }
+# kafka = { workspace = true }
 log = { workspace = true }
 log4rs = { workspace = true }
 dotenv =  { workspace = true }

@@ -79,14 +79,14 @@ pub enum ExtractorConfig {
         now_db_id: i64,
     },
 
-    Kafka {
-        url: String,
-        group: String,
-        topic: String,
-        partition: i32,
-        offset: i64,
-        ack_interval_secs: u64,
-    },
+    // Kafka {
+    //     url: String,
+    //     group: String,
+    //     topic: String,
+    //     partition: i32,
+    //     offset: i64,
+    //     ack_interval_secs: u64,
+    // },
 }
 
 #[derive(Clone, Debug)]

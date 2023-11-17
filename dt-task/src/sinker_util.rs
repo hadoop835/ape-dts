@@ -11,7 +11,7 @@ use dt_common::{
 use dt_connector::{
     sinker::{
         foxlake_sinker::FoxlakeSinker,
-        kafka::{kafka_router::KafkaRouter, kafka_sinker::KafkaSinker},
+        // kafka::{kafka_router::KafkaRouter, kafka_sinker::KafkaSinker},
         mongo::mongo_sinker::MongoSinker,
         mysql::{
             mysql_checker::MysqlChecker, mysql_sinker::MysqlSinker,
@@ -30,7 +30,7 @@ use dt_meta::{
     pg::pg_meta_manager::PgMetaManager, rdb_meta_manager::RdbMetaManager,
     redis::redis_write_method::RedisWriteMethod,
 };
-use kafka::producer::{Producer, RequiredAcks};
+// use kafka::producer::{Producer, RequiredAcks};
 use reqwest::{redirect::Policy, Client, Url};
 use rusoto_core::Region;
 use rusoto_s3::S3Client;
@@ -109,27 +109,27 @@ impl SinkerUtil {
                 .await?
             }
 
-            SinkerConfig::Kafka {
-                url,
-                batch_size,
-                ack_timeout_secs,
-                required_acks,
-            } => {
-                let router = KafkaRouter::from_config(&task_config.router)?;
-                // kafka sinker may need meta data from RDB extractor
-                let meta_manager = Self::get_extractor_meta_manager(&task_config).await?;
-                let avro_converter = AvroConverter::new(meta_manager);
-                SinkerUtil::create_kafka_sinker(
-                    url,
-                    &router,
-                    task_config.parallelizer.parallel_size,
-                    *batch_size,
-                    *ack_timeout_secs,
-                    required_acks,
-                    &avro_converter,
-                )
-                .await?
-            }
+            // SinkerConfig::Kafka {
+            //     url,
+            //     batch_size,
+            //     ack_timeout_secs,
+            //     required_acks,
+            // } => {
+            //     let router = KafkaRouter::from_config(&task_config.router)?;
+            //     // kafka sinker may need meta data from RDB extractor
+            //     let meta_manager = Self::get_extractor_meta_manager(&task_config).await?;
+            //     let avro_converter = AvroConverter::new(meta_manager);
+            //     SinkerUtil::create_kafka_sinker(
+            //         url,
+            //         &router,
+            //         task_config.parallelizer.parallel_size,
+            //         *batch_size,
+            //         *ack_timeout_secs,
+            //         required_acks,
+            //         &avro_converter,
+            //     )
+            //     .await?
+            // }
 
             SinkerConfig::OpenFaas {
                 url,
@@ -330,42 +330,42 @@ impl SinkerUtil {
         Ok(sub_sinkers)
     }
 
-    async fn create_kafka_sinker<'a>(
-        url: &str,
-        router: &KafkaRouter,
-        parallel_size: usize,
-        batch_size: usize,
-        ack_timeout_secs: u64,
-        required_acks: &str,
-        avro_converter: &AvroConverter,
-    ) -> Result<Vec<Arc<async_mutex::Mutex<Box<dyn Sinker + Send>>>>, Error> {
-        let brokers = vec![url.to_string()];
-        let acks = match required_acks {
-            "all" => RequiredAcks::All,
-            "none" => RequiredAcks::None,
-            _ => RequiredAcks::One,
-        };
+    // async fn create_kafka_sinker<'a>(
+    //     url: &str,
+    //     router: &KafkaRouter,
+    //     parallel_size: usize,
+    //     batch_size: usize,
+    //     ack_timeout_secs: u64,
+    //     required_acks: &str,
+    //     avro_converter: &AvroConverter,
+    // ) -> Result<Vec<Arc<async_mutex::Mutex<Box<dyn Sinker + Send>>>>, Error> {
+    //     let brokers = vec![url.to_string()];
+    //     let acks = match required_acks {
+    //         "all" => RequiredAcks::All,
+    //         "none" => RequiredAcks::None,
+    //         _ => RequiredAcks::One,
+    //     };
 
-        let mut sub_sinkers: Vec<Arc<async_mutex::Mutex<Box<dyn Sinker + Send>>>> = Vec::new();
-        for _ in 0..parallel_size {
-            // TODO, authentication, https://github.com/kafka-rust/kafka-rust/blob/master/examples/example-ssl.rs
+    //     let mut sub_sinkers: Vec<Arc<async_mutex::Mutex<Box<dyn Sinker + Send>>>> = Vec::new();
+    //     for _ in 0..parallel_size {
+    //         // TODO, authentication, https://github.com/kafka-rust/kafka-rust/blob/master/examples/example-ssl.rs
 
-            let producer = Producer::from_hosts(brokers.clone())
-                .with_ack_timeout(std::time::Duration::from_secs(ack_timeout_secs))
-                .with_required_acks(acks)
-                .create()
-                .unwrap();
+    //         let producer = Producer::from_hosts(brokers.clone())
+    //             .with_ack_timeout(std::time::Duration::from_secs(ack_timeout_secs))
+    //             .with_required_acks(acks)
+    //             .create()
+    //             .unwrap();
 
-            let sinker = KafkaSinker {
-                batch_size,
-                kafka_router: router.clone(),
-                producer,
-                avro_converter: avro_converter.clone(),
-            };
-            sub_sinkers.push(Arc::new(async_mutex::Mutex::new(Box::new(sinker))));
-        }
-        Ok(sub_sinkers)
-    }
+    //         let sinker = KafkaSinker {
+    //             batch_size,
+    //             kafka_router: router.clone(),
+    //             producer,
+    //             avro_converter: avro_converter.clone(),
+    //         };
+    //         sub_sinkers.push(Arc::new(async_mutex::Mutex::new(Box::new(sinker))));
+    //     }
+    //     Ok(sub_sinkers)
+    // }
 
     async fn create_open_faas_sinker<'a>(
         url: &str,
