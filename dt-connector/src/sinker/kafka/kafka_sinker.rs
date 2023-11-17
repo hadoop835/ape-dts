@@ -4,7 +4,7 @@ use crate::{call_batch_fn, Sinker};
 
 use dt_common::error::Error;
 
-use dt_meta::{avro::avro_converter::AvroConverter, dt_data::DtData, row_data::RowData};
+use dt_meta::{avro::avro_converter::AvroConverter, row_data::RowData};
 
 use kafka::producer::{Producer, Record};
 

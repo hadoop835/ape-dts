@@ -60,7 +60,7 @@ impl SqlUtil {
             _ => i32::MAX,
         } as usize;
 
-        let is_valid_token = |token: &str, db_type: &DbType| -> bool {
+        let _is_valid_token = |token: &str, db_type: &DbType| -> bool {
             match db_type {
                 DbType::Mysql | DbType::Pg => {
                     let pattern = format!(r"^[a-zA-Z0-9_\?\*]{{1,{}}}$", max_token_len);

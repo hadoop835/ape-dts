@@ -1,0 +1,20 @@
+# ARG DIST_IMG=gcr.io/distroless/cc:nonroot
+ARG DIST_IMG=gcr.io/distroless/cc:debug
+
+######
+# Use distroless as minimal base image to package the binary
+# Refer to https://github.com/GoogleContainerTools/distroless for more details
+FROM ${DIST_IMG} as dist
+
+#TARGETOS - OS component from --platform, e.g. linux
+#TARGETARCH - Architecture from --platform, e.g. arm64
+ARG LOCAL_CONFIG_PATH="./images/example/mysql_snapshot_sample.yaml"
+ARG TARGETARCH
+ARG PATH="./images/${TARGETARCH}"
+ARG MODULE_NAME="dt-main"
+
+COPY ${LOCAL_CONFIG_PATH} /config_example
+COPY log4rs.yaml /log4rs.yaml
+COPY ${PATH}/${MODULE_NAME} /ape-dts
+
+ENTRYPOINT [ "/ape-dts" ]

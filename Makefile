@@ -137,6 +137,10 @@ else
 	$(DOCKER) buildx build --platform ${PLATFORMS} --tag $(IMG):$(IMG_TAG) $(DOCKER_BUILD_ARGS) --push .
 endif
 
+.PHONY: docker-push-manual
+docker-push-manual: install-docker-buildx
+	docker buildx build --push --platform ${PLATFORMS} -t $(IMG):$(IMG_TAG) --build-arg MODULE_NAME=$(MODULE_NAME) -f Dockerfile_manual .
+
 ##@ Tools
 
 .PHONY: grcov
