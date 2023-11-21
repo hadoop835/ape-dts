@@ -226,6 +226,13 @@ impl MysqlCdcExtractor {
         included_columns: &Vec<bool>,
         event: &mut RowEvent,
     ) -> Result<HashMap<String, ColValue>, Error> {
+        if self
+            .filter
+            .filter_tb(&table_map_event.database_name, &table_map_event.table_name)
+        {
+            return Ok(HashMap::new());
+        }
+
         let tb_meta = self
             .meta_manager
             .get_tb_meta(&table_map_event.database_name, &table_map_event.table_name)
