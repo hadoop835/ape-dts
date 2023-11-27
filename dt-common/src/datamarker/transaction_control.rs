@@ -532,7 +532,7 @@ mod tests {
             curr_topology.clone(),
         );
 
-        assert!(!is_filter);
+        assert!(is_filter);
 
         // black and white list
         transaction_worker = build_worker(

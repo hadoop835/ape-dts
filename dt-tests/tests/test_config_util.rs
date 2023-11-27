@@ -178,7 +178,7 @@ impl TestConfigUtil {
             DbType::Pg => env::var("pg_extractor_url").unwrap(),
             DbType::Mongo => env::var("mongo_extractor_url").unwrap(),
             DbType::Redis => env::var("redis_extractor_url").unwrap(),
-            DbType::Kafka => env::var("kafka_extractor_url").unwrap(),
+            // DbType::Kafka => env::var("kafka_extractor_url").unwrap(),
             _ => String::new(),
         };
         if !extractor_url.is_empty() {
@@ -190,7 +190,7 @@ impl TestConfigUtil {
             DbType::Pg => env::var("pg_sinker_url").unwrap(),
             DbType::Mongo => env::var("mongo_sinker_url").unwrap(),
             DbType::Redis => env::var("redis_sinker_url").unwrap(),
-            DbType::Kafka => env::var("kafka_sinker_url").unwrap(),
+            // DbType::Kafka => env::var("kafka_sinker_url").unwrap(),
             _ => String::new(),
         };
         if !sinker_url.is_empty() {
