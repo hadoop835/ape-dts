@@ -116,12 +116,14 @@ impl MysqlCreateTableStatement {
                 sql.push_str(&format!("{} ", i.extra.replace("DEFAULT_GENERATED", "")));
             }
 
-            if !i.character_set.is_empty() {
-                sql.push_str(&format!("CHARACTER SET {} ", i.character_set))
-            }
+            if i.default_value.is_none() {
+                if !i.character_set.is_empty() {
+                    sql.push_str(&format!("CHARACTER SET {} ", i.character_set))
+                }
 
-            if !i.collation.is_empty() {
-                sql.push_str(&format!("COLLATE {} ", i.collation))
+                if !i.collation.is_empty() {
+                    sql.push_str(&format!("COLLATE {} ", i.collation))
+                }
             }
 
             let nullable = if i.is_nullable.to_lowercase() == "no" {
