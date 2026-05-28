@@ -81,6 +81,11 @@ impl TimeWindowCounter {
 
     #[inline(always)]
     pub async fn statistics(&self) -> WindowCounterStatistics {
+        self.statistics_in_window(self.time_window_secs).await
+    }
+
+    #[inline(always)]
+    pub async fn statistics_in_window(&self, time_window_secs: u64) -> WindowCounterStatistics {
         let counters = self.counters.read().await;
         if counters.is_empty() {
             return WindowCounterStatistics::default();
@@ -97,7 +102,7 @@ impl TimeWindowCounter {
         let mut sec_sums = LimitedQueue::new(1000);
 
         for counter in counters.iter() {
-            if counter.timestamp.elapsed().as_secs() >= self.time_window_secs {
+            if counter.timestamp.elapsed().as_secs() >= time_window_secs {
                 continue;
             }
 
@@ -152,5 +157,18 @@ impl TimeWindowCounter {
         }
 
         statistics
+    }
+
+    #[inline(always)]
+    pub async fn has_live_data(&self) -> bool {
+        self.has_live_data_in_window(self.time_window_secs).await
+    }
+
+    #[inline(always)]
+    pub async fn has_live_data_in_window(&self, time_window_secs: u64) -> bool {
+        let counters = self.counters.read().await;
+        counters
+            .iter()
+            .any(|counter| counter.timestamp.elapsed().as_secs() < time_window_secs)
     }
 }

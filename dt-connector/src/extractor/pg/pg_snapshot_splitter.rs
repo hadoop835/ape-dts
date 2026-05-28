@@ -1,7 +1,8 @@
-use std::collections::HashMap;
 use std::vec;
+use std::{collections::HashMap, sync::Arc};
 
 use anyhow::Context;
+use dt_common::config::config_enums::DbType;
 use dt_common::log_info;
 use dt_common::meta::position::Position;
 use dt_common::meta::{
@@ -10,8 +11,8 @@ use dt_common::meta::{
     pg::pg_tb_meta::PgTbMeta,
     rdb_tb_meta::RdbTbMeta,
 };
+use dt_common::quote_pg;
 use dt_common::utils::sql_util::*;
-use dt_common::{config::config_enums::DbType, quote_pg};
 use futures::TryStreamExt;
 use sqlx::{Pool, Postgres, Row};
 
@@ -19,26 +20,24 @@ use crate::extractor::base_splitter::{self, BaseSplitter, ChunkRange, Error::*, 
 
 use quote_pg as quote;
 
-pub struct PgSnapshotSplitter<'a> {
+pub struct PgSnapshotSplitter {
     basic: BaseSplitter,
     snapshot_range: Option<ChunkRange>,
-    pg_tb_meta: &'a PgTbMeta,
+    pg_tb_meta: Arc<PgTbMeta>,
     conn_pool: Pool<Postgres>,
     batch_size: u64,
     estimated_row_count: u64,
     partition_col: String,
     current_col_value: Option<ColValue>,
-    checkpoint_id: u64,
-    checkpoint_map: HashMap<u64, ColValue>,
 }
 
-impl PgSnapshotSplitter<'_> {
+impl PgSnapshotSplitter {
     pub fn new(
-        pg_tb_meta: &PgTbMeta,
+        pg_tb_meta: Arc<PgTbMeta>,
         conn_pool: Pool<Postgres>,
         batch_size: usize,
         partition_col: String,
-    ) -> PgSnapshotSplitter<'_> {
+    ) -> PgSnapshotSplitter {
         PgSnapshotSplitter {
             basic: BaseSplitter::new(),
             snapshot_range: None,
@@ -48,8 +47,6 @@ impl PgSnapshotSplitter<'_> {
             estimated_row_count: 0,
             partition_col,
             current_col_value: None,
-            checkpoint_id: 0,
-            checkpoint_map: HashMap::new(),
         }
     }
 
@@ -67,7 +64,7 @@ impl PgSnapshotSplitter<'_> {
         if self.basic.has_no_next_chunks() {
             return Ok(Vec::new());
         }
-        let pg_tb_meta = self.pg_tb_meta;
+        let pg_tb_meta = Arc::clone(&self.pg_tb_meta);
         let partition_col = &self.partition_col;
         let partition_col_type = pg_tb_meta.get_col_type(partition_col)?;
         if !partition_col_type.can_be_splitted() {
@@ -100,7 +97,7 @@ impl PgSnapshotSplitter<'_> {
                 .gen_next_chunk((ColValue::None, ColValue::None))]);
         }
         if !self.basic.has_no_even_chunks() && partition_col_type.is_integer() {
-            let chunks = self.get_evenly_sized_chunks(pg_tb_meta).await;
+            let chunks = self.get_evenly_sized_chunks(&pg_tb_meta).await;
             if let Err(e) = chunks {
                 match e.downcast_ref::<base_splitter::Error>() {
                     Some(BadSplitColumnError { .. }) => {
@@ -117,7 +114,7 @@ impl PgSnapshotSplitter<'_> {
                 return chunks;
             }
         }
-        if let Some(chunk) = self.get_next_unevenly_sized_chunk(pg_tb_meta).await? {
+        if let Some(chunk) = self.get_next_unevenly_sized_chunk(&pg_tb_meta).await? {
             return Ok(vec![chunk]);
         }
         Ok(Vec::new())
@@ -128,29 +125,13 @@ impl PgSnapshotSplitter<'_> {
         chunk_id: u64,
         partition_col_value: ColValue,
     ) -> Option<Position> {
-        let partition_col = &self.partition_col;
-        let mut position = if chunk_id == self.checkpoint_id + 1 {
-            self.checkpoint_id = chunk_id;
-            self.pg_tb_meta.basic.build_position_for_partition(
-                &DbType::Pg,
-                partition_col,
-                &partition_col_value,
-            )
-        } else {
-            self.checkpoint_map
-                .insert(chunk_id, partition_col_value.clone());
-            return None;
-        };
-        while let Some(partition_col_values) = self.checkpoint_map.remove(&(self.checkpoint_id + 1))
-        {
-            self.checkpoint_id += 1;
-            position = self.pg_tb_meta.basic.build_position_for_partition(
-                &DbType::Pg,
-                partition_col,
-                &partition_col_values,
-            );
-        }
-        Some(position)
+        self.basic.get_next_checkpoint_position(
+            chunk_id,
+            partition_col_value,
+            &DbType::Pg,
+            &self.partition_col,
+            &self.pg_tb_meta.basic,
+        )
     }
 
     async fn estimate_row_count(&mut self, tb_meta: &RdbTbMeta) -> anyhow::Result<u64> {
