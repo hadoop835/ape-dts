@@ -2,6 +2,7 @@ use regex::Regex;
 use sqlx::{mysql::MySqlRow, ColumnIndex, Row};
 
 use crate::config::config_enums::DbType;
+use crate::meta::mysql::mysql_col_type::MysqlColType;
 
 pub struct SqlUtil {}
 
@@ -74,6 +75,26 @@ impl SqlUtil {
             escaped_cols.push(Self::escape_by_db_type(col, db_type));
         }
         escaped_cols
+    }
+
+    pub fn mysql_spatial_as_wkb_expr(col: &str, alias: &str) -> String {
+        format!("ST_AsBinary({}) AS {}", col, alias)
+    }
+
+    pub fn mysql_spatial_from_wkb_hex_expr(hex_value: &str) -> String {
+        format!("ST_GeomFromWKB(x'{}')", hex_value)
+    }
+
+    pub fn mysql_spatial_from_wkb_placeholder_expr() -> String {
+        "ST_GeomFromWKB(?)".to_string()
+    }
+
+    pub fn mysql_comparison_placeholder(col_type: &MysqlColType) -> String {
+        // https://dev.mysql.com/doc/refman/5.7/en/type-conversion.html
+        match col_type {
+            MysqlColType::Time { precision } => format!("CAST(? AS TIME({}))", precision),
+            _ => "?".to_string(),
+        }
     }
 
     pub fn get_escape_pairs(db_type: &DbType) -> Vec<(char, char)> {
@@ -159,8 +180,8 @@ impl SqlUtil {
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
+
     #[test]
     #[ignore]
     fn test_check_valid_token_without_escapes() {
@@ -247,5 +268,21 @@ mod tests {
             &db_type,
             &escape_pairs
         ));
+    }
+
+    #[test]
+    fn test_mysql_spatial_exprs() {
+        assert_eq!(
+            "ST_AsBinary(`geo`) AS `geo`",
+            SqlUtil::mysql_spatial_as_wkb_expr("`geo`", "`geo`")
+        );
+        assert_eq!(
+            "ST_GeomFromWKB(x'0101000000000000000000F03F000000000000F03F')",
+            SqlUtil::mysql_spatial_from_wkb_hex_expr("0101000000000000000000F03F000000000000F03F")
+        );
+        assert_eq!(
+            "ST_GeomFromWKB(?)",
+            SqlUtil::mysql_spatial_from_wkb_placeholder_expr()
+        );
     }
 }
