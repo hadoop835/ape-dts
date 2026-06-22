@@ -356,7 +356,7 @@ suite_services() {
     pg_to_pg_check) echo "postgres-src postgres-dst" ;;
     pg_to_pg_lua) echo "postgres-src postgres-dst" ;;
     pg_to_starrocks) echo "postgres-src starrocks-3-2-11" ;;
-    mongo_to_mongo) echo "mongo-src mongo-dst" ;;
+    mongo_to_mongo) echo "mongo-src mongo-dst mongo-sharding-src-config mongo-sharding-src-shard mongo-sharding-src-init mongo-sharding-src-mongos mongo-sharding-src-add-shard-init mongo-sharding-dst-config mongo-sharding-dst-shard mongo-sharding-dst-init mongo-sharding-dst-mongos mongo-sharding-dst-add-shard-init" ;;
     redis_to_redis_2_8) echo "redis-src-2-8 redis-dst-2-8" ;;
     redis_to_redis_4_0) echo "redis-src-4-0 redis-dst-4-0" ;;
     redis_to_redis_5_0) echo "redis-src-5-0 redis-dst-5-0" ;;
@@ -386,6 +386,14 @@ service_wait_mode() {
   fi
 
   echo "default"
+}
+
+suite_wait_timeout_secs() {
+  local suite="$1"
+  case "${suite}" in
+    mongo_to_mongo) echo "${MONGO_SHARDING_WAIT_TIMEOUT_SECS:-120}" ;;
+    *) echo "${WAIT_TIMEOUT_SECS}" ;;
+  esac
 }
 
 service_is_init() {
@@ -684,7 +692,7 @@ wait_for_services() {
     return 0
   fi
 
-  local deadline=$((SECONDS + WAIT_TIMEOUT_SECS))
+  local deadline=$((SECONDS + $(suite_wait_timeout_secs "${suite}")))
   local service
   while IFS= read -r service; do
     [[ -n "${service}" ]] || continue

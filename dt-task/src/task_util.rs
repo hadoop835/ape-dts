@@ -368,15 +368,20 @@ impl TaskUtil {
     pub async fn create_mongo_client(
         url: &str,
         connection_auth: &ConnectionAuthConfig,
-        app_name: &str,
+        is_direct_connection: Option<bool>,
+        app_name: Option<String>,
         max_pool_size: Option<u32>,
     ) -> anyhow::Result<mongodb::Client> {
         let final_url = ConnectionAuthConfig::merge_url_with_auth(url, connection_auth)?;
 
-        let mut client_options = ClientOptions::parse_async(&final_url).await?;
+        let mut client_options = ClientOptions::parse(&final_url).await?;
         // app_name only for debug usage
-        client_options.app_name = Some(app_name.to_string());
-        client_options.direct_connection = Some(true);
+        if let Some(app) = app_name {
+            client_options.app_name = Some(app.to_string());
+        }
+        if let Some(is_direct_connection) = is_direct_connection {
+            client_options.direct_connection = Some(is_direct_connection);
+        }
         client_options.max_pool_size = max_pool_size;
 
         Ok(mongodb::Client::with_options(client_options)?)
@@ -680,7 +685,7 @@ WHERE
             }
         };
         let dbs = client
-            .list_database_names(None, None)
+            .list_database_names()
             .await?
             .into_iter()
             .filter(|name| !SystemDb::is_system_db(name, &DbType::Mongo))
@@ -698,7 +703,8 @@ WHERE
         // filter views and system tables
         let tbs = client
             .database(db)
-            .list_collection_names(Some(doc! { "type": "collection" }))
+            .list_collection_names()
+            .filter(doc! { "type": "collection" })
             .await?
             .into_iter()
             .filter(|name| !name.starts_with("system."))
@@ -733,6 +739,7 @@ WHERE
                 connection_auth,
                 db_type,
                 max_connections,
+                is_direct_connection,
                 ..
             } => {
                 let pool = ResumerUtil::create_pool(
@@ -740,6 +747,7 @@ WHERE
                     connection_auth,
                     db_type,
                     *max_connections as u32,
+                    *is_direct_connection,
                 )
                 .await?;
                 Some(pool)
@@ -904,25 +912,36 @@ impl ConnClient {
             ExtractorConfig::MongoSnapshot {
                 url,
                 connection_auth,
+                is_direct_connection,
                 app_name,
                 ..
             }
             | ExtractorConfig::MongoCheck {
                 url,
                 connection_auth,
+                is_direct_connection,
+                app_name,
+                ..
+            }
+            | ExtractorConfig::MongoStruct {
+                url,
+                connection_auth,
+                is_direct_connection,
                 app_name,
                 ..
             }
             | ExtractorConfig::MongoCdc {
                 url,
                 connection_auth,
+                is_direct_connection,
                 app_name,
                 ..
             } => ConnClient::MongoDB(
                 TaskUtil::create_mongo_client(
                     url,
                     connection_auth,
-                    app_name,
+                    *is_direct_connection,
+                    Some(app_name.to_string()),
                     Some(extractor_max_connections),
                 )
                 .await?,
@@ -1000,13 +1019,22 @@ impl ConnClient {
             SinkerConfig::Mongo {
                 url,
                 connection_auth,
+                is_direct_connection,
+                app_name,
+                ..
+            }
+            | SinkerConfig::MongoStruct {
+                url,
+                connection_auth,
+                is_direct_connection,
                 app_name,
                 ..
             } => ConnClient::MongoDB(
                 TaskUtil::create_mongo_client(
                     url,
                     connection_auth,
-                    app_name,
+                    *is_direct_connection,
+                    Some(app_name.to_string()),
                     Some(sinker_max_connections),
                 )
                 .await?,

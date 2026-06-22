@@ -1,4 +1,4 @@
-use std::{str::FromStr, sync::Arc};
+use std::{collections::HashMap, str::FromStr, sync::Arc};
 
 use anyhow::{bail, Context};
 use kafka::producer::{Producer, RequiredAcks};
@@ -13,6 +13,7 @@ use dt_common::{
     },
     meta::{
         avro::avro_converter::AvroConverter,
+        mongo::mongo_shard::{is_mongos, list_shard_collections},
         mysql::mysql_meta_manager::MysqlMetaManager,
         pg::pg_meta_manager::PgMetaManager,
         redis::{
@@ -44,7 +45,7 @@ use dt_connector::{
             orc_sequencer::OrcSequencer,
         },
         kafka::kafka_sinker::KafkaSinker,
-        mongo::mongo_sinker::MongoSinker,
+        mongo::{mongo_sinker::MongoSinker, mongo_struct_sinker::MongoStructSinker},
         mysql::{mysql_sinker::MysqlSinker, mysql_struct_sinker::MysqlStructSinker},
         pg::{pg_sinker::PgSinker, pg_struct_sinker::PgStructSinker},
         redis::{redis_sinker::RedisSinker, redis_statistic_sinker::RedisStatisticSinker},
@@ -171,7 +172,11 @@ impl SinkerUtil {
                 }
             }
 
-            SinkerConfig::Mongo { batch_size, .. } => {
+            SinkerConfig::Mongo {
+                batch_size,
+                require_shard_key_filter,
+                ..
+            } => {
                 let router = RdbRouter::from_config(&config.router, &DbType::Mongo)?;
                 let mongo_client = match client {
                     ConnClient::MongoDB(mongo_client) => mongo_client,
@@ -179,15 +184,42 @@ impl SinkerUtil {
                         bail!("connection pool not found");
                     }
                 };
+                let is_target_mongos = is_mongos(&mongo_client).await?;
                 for _ in 0..parallel_size {
                     let sinker = MongoSinker {
                         batch_size,
                         router: router.clone(),
                         mongo_client: mongo_client.clone(),
                         base_sinker: BaseSinker::new(monitor.clone(), monitor_interval),
+                        target_shard_collections: HashMap::new(),
+                        require_shard_key_filter,
+                        is_target_mongos,
                     };
                     Self::push_checkable_sinker(&mut sub_sinkers, sinker, &checker);
                 }
+            }
+
+            SinkerConfig::MongoStruct {
+                conflict_policy, ..
+            } => {
+                let filter = create_filter!(config, Mongo);
+                let mongo_client = match client {
+                    ConnClient::MongoDB(mongo_client) => mongo_client,
+                    _ => {
+                        bail!("connection pool not found");
+                    }
+                };
+                let (is_target_mongos, target_shard_collections) =
+                    list_shard_collections(&mongo_client).await?;
+                let sinker = MongoStructSinker {
+                    mongo_client,
+                    conflict_policy,
+                    filter,
+                    base_sinker: BaseSinker::new(monitor.clone(), monitor_interval),
+                    target_shard_collections,
+                    is_target_mongos,
+                };
+                Self::push_sinker(&mut sub_sinkers, sinker);
             }
 
             SinkerConfig::Kafka {
